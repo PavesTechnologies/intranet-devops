@@ -13,14 +13,7 @@ def call(Map config) {
 
             stage('Checkout') {
                 steps {
-                    script {
-                        def branchToBuild = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-            
-                        git branch: branchToBuild,
-                            url: config.repoUrl
-            
-                        echo "Checking out branch: ${branchToBuild}"
-                    }
+                    checkout scm
                 }
             }
 
