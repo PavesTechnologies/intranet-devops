@@ -17,6 +17,21 @@ def call(Map config) {
                 }
             }
 
+             stage('Setup Java') {
+                steps {
+                    script {
+                        def selectedJdk = config.jdk ?: 'jdk17'
+
+                        echo "Using JDK: ${selectedJdk}"
+
+                        env.JAVA_HOME = tool selectedJdk
+                        env.PATH = "${env.JAVA_HOME}/bin:${env.PATH}"
+
+                        sh 'java -version'
+                    }
+                }
+            }
+            
             stage('Compile') {
                 steps {
                     sh "mvn clean compile -DskipTests"
