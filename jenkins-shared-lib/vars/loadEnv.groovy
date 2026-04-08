@@ -5,8 +5,8 @@ def call(String secretName, String region = 'ap-south-1') {
         --secret-id ${secretName} \
         --region ${region} \
         --query SecretString \
-        --output text > .env
+        --output text | jq -r 'to_entries|map("\\(.key)=\\(.value)")|.[]' > .env
     """
 
-    echo "Loaded environment from AWS Secrets Manager"
+    echo "Converted AWS secret JSON → .env file"
 }
