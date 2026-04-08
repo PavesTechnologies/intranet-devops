@@ -7,7 +7,7 @@ def call(Map config) {
 
             stage('Load Environment') {
                 steps {
-                    loadEnv(config.envCredential)
+                    loadEnv(config.envSecret)
                 }
             }
 
