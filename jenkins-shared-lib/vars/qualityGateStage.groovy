@@ -5,7 +5,6 @@ def call() {
     // timeout(time: 2, unit: 'MINUTES') {
     //     waitForQualityGate abortPipeline: true
     // }
-    script {
     echo "Skip Quality Gate"
-    }
+    
 }
