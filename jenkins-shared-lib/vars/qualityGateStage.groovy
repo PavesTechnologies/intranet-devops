@@ -1,10 +1,8 @@
+// vars/qualityGateStage.groovy
 def call() {
-
-    stage('Quality Gate') {
-        steps {
-            timeout(time: 2, unit: 'MINUTES') {
-                waitForQualityGate abortPipeline: true
-            }
-        }
+    // REMOVED 'steps' block
+    // Wrapping in timeout directly
+    timeout(time: 2, unit: 'MINUTES') {
+        waitForQualityGate abortPipeline: true
     }
 }
