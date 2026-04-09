@@ -1,26 +1,19 @@
 def call(Map config) {
-
+    // REMOVED 'steps' block - not allowed here
     stage('Load Environment') {
-        steps {
-            loadEnv(config.envSecret)
-        }
+        loadEnv(config.envSecret)
     }
 
     stage('Checkout') {
-        steps {
-            checkout scm
-        }
+        checkout scm
     }
 
     stage('Print Branch Info') {
-        steps {
-            script {
-                def branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-                def target = env.CHANGE_TARGET ?: 'N/A'
-
-                echo "Branch: ${branch}"
-                echo "Target Branch: ${target}"
-            }
+        script {
+            def branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+            def target = env.CHANGE_TARGET ?: 'N/A'
+            echo "Branch: ${branch}"
+            echo "Target Branch: ${target}"
         }
     }
 }
