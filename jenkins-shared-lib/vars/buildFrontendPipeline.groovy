@@ -98,7 +98,7 @@ def call(Map config) {
                         // AWS Secrets Manager and returns a Map<String, String>.
                         // Values are NOT forwarded to the Vite build process.
                         if (config.envSecret) {
-                            runtimeCfg = loadEnv(config.envSecret)
+                            runtimeCfg = loadConfig(config.envSecret)
                             echo "Loaded ${runtimeCfg.size()} runtime config key(s) from '${config.envSecret}'"
                         } else {
                             echo "No envSecret configured – config.js will contain an empty object."
