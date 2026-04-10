@@ -3,20 +3,31 @@ import groovy.json.JsonSlurperClassic
 def call(String secretName, String region = 'ap-south-1') {
     echo "Fetching secret: ${secretName}"
     
-    // Fetch the raw string from AWS
+    // We use -r (raw) to ensure we get the clean string content
+    // We pipe to jq '.' to validate it's actual JSON before returning to Groovy
     def rawJson = sh(
-        script: "aws secretsmanager get-secret-value --secret-id ${secretName} --region ${region} --query SecretString --output text",
+        script: """
+            aws secretsmanager get-secret-value \
+                --secret-id ${secretName} \
+                --region ${region} \
+                --query SecretString \
+                --output text | jq -c '.'
+        """,
         returnStdout: true
     ).trim()
 
-    if (!rawJson || rawJson == "null") {
-        error "Failed to fetch secret or secret is empty: ${secretName}"
+    // Debug: This will show in Jenkins logs if it's still failing
+    // echo "Raw string received: ${rawJson}"
+
+    if (!rawJson || rawJson == "null" || rawJson.startsWith("Error")) {
+        error "Failed to fetch secret or invalid format: ${secretName}"
     }
 
-    // Use JsonSlurperClassic for Jenkins Pipeline compatibility
-    // We use @NonCPS if logic gets complex, but for a simple parse this is fine
-    def slurper = new JsonSlurperClassic()
-    def configMap = slurper.parseText(rawJson)
-    
-    return configMap
+    try {
+        def slurper = new JsonSlurperClassic()
+        return slurper.parseText(rawJson)
+    } catch (Exception e) {
+        echo "Failed to parse JSON. Content was: ${rawJson}"
+        throw e
+    }
 }
