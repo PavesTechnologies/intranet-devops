@@ -8,10 +8,9 @@ def call(String secretName, String region = 'ap-south-1') {
     def rawJson = sh(
         script: """
             aws secretsmanager get-secret-value \
-                --secret-id ${secretName} \
-                --region ${region} \
-                --query SecretString \
-                --output text | jq -c '.'
+                --secret-id "${secretName}" \
+                --region "${region}" \
+                --output json | jq -r '.SecretString'
         """,
         returnStdout: true
     ).trim()
