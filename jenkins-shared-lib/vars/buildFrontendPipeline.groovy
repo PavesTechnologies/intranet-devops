@@ -151,18 +151,19 @@ def call(Map config) {
                             expression { config.sonarProjectKey != null }
                         }
                         steps {
-                            // Replace with sonarScan(config.sonarProjectKey) if you
-                            // have a shared helper analogous to the backend template.
-                            def scannerHome = tool 'sonar-scanner'
-                            
-                            withSonarQubeEnv('SonarQube') {
-                                sh """
-                                    ${scannerHome}/bin/sonar-scanner \
-                                      -Dsonar.projectKey=${config.sonarProjectKey} \
-                                      -Dsonar.sources=src \
-                                      -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
-                                      -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                                """
+                            script {
+                                // This 'tool' command adds the scanner to the PATH for this block
+                                def scannerHome = tool 'sonar-scanner' 
+                                
+                                withSonarQubeEnv('SonarQube') {
+                                    sh """
+                                        ${scannerHome}/bin/sonar-scanner \
+                                          -Dsonar.projectKey=${config.sonarProjectKey} \
+                                          -Dsonar.sources=src \
+                                          -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
+                                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                                    """
+                                }
                             }
                         }
                     }
