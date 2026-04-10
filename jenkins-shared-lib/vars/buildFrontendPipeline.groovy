@@ -153,9 +153,11 @@ def call(Map config) {
                         steps {
                             // Replace with sonarScan(config.sonarProjectKey) if you
                             // have a shared helper analogous to the backend template.
+                            def scannerHome = tool 'sonar-scanner'
+                            
                             withSonarQubeEnv('SonarQube') {
                                 sh """
-                                    sonar-scanner \
+                                    ${scannerHome}/bin/sonar-scanner \
                                       -Dsonar.projectKey=${config.sonarProjectKey} \
                                       -Dsonar.sources=src \
                                       -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
