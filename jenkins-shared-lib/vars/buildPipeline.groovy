@@ -26,7 +26,7 @@ def call(Map config) {
             // stage('Parallel Checks') {
             //     parallel {
                     stage('Unit Tests') {
-                        steps { sh "mvn test" }
+                        steps { sh "mvn clean test -B -e" }
                     }
                     stage('SonarQube') {
                         steps { sonarScan(config.sonarProjectKey) }
