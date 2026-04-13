@@ -251,7 +251,7 @@ ${entries}
                         
                             # ── Pass 3: config.js ─────────────────────────────
                             # Added a trailing slash to ${s3Uri} to ensure the path is correct
-                            aws s3 cp ${config.buildDir}/config.js ${s3Uri}/config.js \
+                            aws s3 cp ${config.buildDir}/config.js ${s3Uri}config.js \
                                 --region ${config.awsRegion} \
                                 --cache-control "no-store, must-revalidate" \
                                 --content-type "application/javascript"
