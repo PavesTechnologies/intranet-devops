@@ -23,8 +23,8 @@ def call(Map config) {
                     sh "mvn clean compile -DskipTests"
                 }
             }
-            stage('Parallel Checks') {
-                parallel {
+            // stage('Parallel Checks') {
+            //     parallel {
                     stage('Unit Tests') {
                         steps { sh "mvn test" }
                         post {
@@ -34,8 +34,8 @@ def call(Map config) {
                     stage('SonarQube') {
                         steps { sonarScan(config.sonarProjectKey) }
                     }
-                }
-            }
+                // }
+            // }
             stage('Quality Gate') {
                 steps {
                     script { qualityGateStage() }
