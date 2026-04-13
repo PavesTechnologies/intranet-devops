@@ -175,6 +175,8 @@ def call(Map config) {
             stage('Generate config.js') {
                 steps {
                     script {
+                        // basepath for react router
+                        runtimeCfg['basePath'] = "/${s3Prefix}"
                         // Serialise the Map to JS object literal entries.
                         // groovy.json.JsonOutput.toJson() handles quoting/escaping
                         // of string values so the output is valid JSON/JS.
