@@ -127,49 +127,43 @@ def call(Map config) {
                 }
             }
 
-            // ── 4. Parallel: Clean build + Security scan ──────────────────────
-            // The Vite build runs with NO environment-specific variables.
-            // The output artifact (dist/) is byte-for-byte identical across all
-            // environments — only config.js (generated in stage 5) differs.
-            stage('Parallel checks') {
-                parallel {
+            
 
-                    stage('Build (clean)') {
-                        steps {
-                            nodejs(nodeJSInstallationName: config.nodeVersion) {
-                                sh "npm run build"
-                                sh """
-                                    test -d ${config.buildDir} || \
-                                        (echo 'ERROR: ${config.buildDir}/ not found after build.' && exit 1)
-                                """
-                            }
-                        }
+            stage('Build (clean)') {
+                steps {
+                    nodejs(nodeJSInstallationName: config.nodeVersion) {
+                        sh "npm run build"
+                        sh """
+                            test -d ${config.buildDir} || \
+                                (echo 'ERROR: ${config.buildDir}/ not found after build.' && exit 1)
+                        """
                     }
-
-                    stage('Security scan (SonarQube)') {
-                        when {
-                            expression { config.sonarProjectKey != null }
-                        }
-                        steps {
-                            script {
-                                // This 'tool' command adds the scanner to the PATH for this block
-                                def scannerHome = tool 'sonar-scanner' 
-                                
-                                withSonarQubeEnv('SonarQube') {
-                                    sh """
-                                        ${scannerHome}/bin/sonar-scanner \
-                                          -Dsonar.projectKey=${config.sonarProjectKey} \
-                                          -Dsonar.sources=src \
-                                          -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
-                                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                                    """
-                                }
-                            }
-                        }
-                    }
-
                 }
             }
+
+            stage('Security scan (SonarQube)') {
+                when {
+                    expression { config.sonarProjectKey != null }
+                }
+                steps {
+                    script {
+                        // This 'tool' command adds the scanner to the PATH for this block
+                        def scannerHome = tool 'sonar-scanner' 
+                        
+                        withSonarQubeEnv('SonarQube') {
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                  -Dsonar.projectKey=${config.sonarProjectKey} \
+                                  -Dsonar.sources=src \
+                                  -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
+                                  -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                            """
+                        }
+                    }
+                }
+            }
+
+                
 
             // ── 5. Generate config.js ─────────────────────────────────────────
             // This is the ONLY step that differs between environments.
