@@ -229,6 +229,7 @@ ${entries}
 
                         sh """
                             # ── Pass 1: Hashed static assets ──────────────────
+                            # We use --delete here to clean up old hashed files from previous builds
                             aws s3 sync ${config.buildDir}/ ${s3Uri} \
                                 --delete \
                                 --region ${config.awsRegion} \
@@ -236,24 +237,24 @@ ${entries}
                                 --exclude "index.html" \
                                 --exclude "config.js" \
                                 --exclude "*.json"
-
+                        
                             # ── Pass 2: index.html + JSON manifests ───────────
+                            # Removed --no-delete (it's the default behavior)
                             aws s3 sync ${config.buildDir}/ ${s3Uri} \
                                 --region ${config.awsRegion} \
                                 --cache-control "no-cache, no-store, must-revalidate" \
                                 --exclude "*" \
                                 --include "index.html" \
-                                --include "*.json" \
-                                --no-delete
-
+                                --include "*.json"
+                        
                             # ── Pass 3: config.js ─────────────────────────────
-                            # Explicit cp (not sync) so --cache-control and
-                            # --content-type are applied precisely to this one file.
-                            aws s3 cp ${config.buildDir}/config.js ${s3Uri}config.js \
+                            # Added a trailing slash to ${s3Uri} to ensure the path is correct
+                            aws s3 cp ${config.buildDir}/config.js ${s3Uri}/config.js \
                                 --region ${config.awsRegion} \
                                 --cache-control "no-store, must-revalidate" \
                                 --content-type "application/javascript"
                         """
+                        
                     }
                 }
             }
