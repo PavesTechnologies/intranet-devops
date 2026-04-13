@@ -27,9 +27,6 @@ def call(Map config) {
             //     parallel {
                     stage('Unit Tests') {
                         steps { sh "mvn test" }
-                        post {
-                            always { junit 'target/surefire-reports/*.xml' }
-                        }
                     }
                     stage('SonarQube') {
                         steps { sonarScan(config.sonarProjectKey) }
