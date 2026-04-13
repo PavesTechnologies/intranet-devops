@@ -51,7 +51,7 @@ def call(Map config) {
     def runtimeCfg = [:]   // key/value pairs from Secrets Manager → written to config.js
 
     pipeline {
-        agent any
+         agent { label 'worker' }
 
         options {
             timestamps()
