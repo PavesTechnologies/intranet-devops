@@ -1,0 +1,27 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: paves-backend-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: paves-backend-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: paves-service-account
+    namespace: backend
+  - kind: ServiceAccount
+    name: paves-service-account
+    namespace: infra
+roleRef:
+  kind: ClusterRole
+  name: paves-backend-role
+  apiGroup: rbac.authorization.k8s.io

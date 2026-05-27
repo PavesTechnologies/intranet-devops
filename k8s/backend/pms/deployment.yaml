@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pms-deployment
+  namespace: backend
+  labels:
+    app: pms
+    team: paves
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pms
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: pms
+    spec:
+      serviceAccountName: paves-service-account
+      containers:
+        - name: pms
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/pms-dev:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: pms-secrets
+          env:
+            - name: SERVER_SERVLET_CONTEXT_PATH
+              value: "/pms"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3

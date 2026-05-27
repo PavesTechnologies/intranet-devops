@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: eos-service
+  namespace: backend
+  labels:
+    app: eos
+    team: paves
+spec:
+  selector:
+    app: eos
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

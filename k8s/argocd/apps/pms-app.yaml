@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: paves-pms
+  namespace: argocd
+  labels:
+    team: paves
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PavesTechnologies/intranet-devops
+    targetRevision: main
+    path: k8s/backend/pms
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backend
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

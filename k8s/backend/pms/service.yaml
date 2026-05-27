@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pms-service
+  namespace: backend
+  labels:
+    app: pms
+    team: paves
+spec:
+  selector:
+    app: pms
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-insight
+  namespace: infra
+  labels:
+    app: redis-insight
+    team: paves
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-insight
+  template:
+    metadata:
+      labels:
+        app: redis-insight
+    spec:
+      containers:
+        - name: redis-insight
+          image: redis/redisinsight:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5540
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-insight-service
+  namespace: infra
+  labels:
+    app: redis-insight
+    team: paves
+spec:
+  selector:
+    app: redis-insight
+  ports:
+    - port: 5540
+      targetPort: 5540
+  type: ClusterIP
