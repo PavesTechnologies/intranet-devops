@@ -27,7 +27,7 @@ spec:
       containers:
         - name: lms
           image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/lms-dev:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9999
           envFrom:

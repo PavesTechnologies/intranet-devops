@@ -25,7 +25,7 @@ spec:
       containers:
         - name: ums
           image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/ums-dev:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           envFrom:

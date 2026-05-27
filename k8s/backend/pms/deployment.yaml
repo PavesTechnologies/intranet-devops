@@ -25,7 +25,7 @@ spec:
       containers:
         - name: pms
           image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/pms-dev:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
