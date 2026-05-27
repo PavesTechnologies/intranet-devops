@@ -52,7 +52,7 @@ spec:
                 name: rms-service
                 port:
                   number: 8080
-          - path: /esm
+          - path: /ems
             pathType: Prefix
             backend:
               service:
