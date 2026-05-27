@@ -24,8 +24,8 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: eos
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/eos-dev:latest
-          imagePullPolicy: IfNotPresent
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/esm-dev:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           envFrom:
@@ -33,11 +33,11 @@ spec:
                 name: eos-secrets
           resources:
             requests:
-              cpu: "250m"
+              cpu: "100m"
               memory: "256Mi"
             limits:
-              cpu: "1000m"
-              memory: "512Mi"
+              cpu: "800m"
+              memory: "768Mi"
           livenessProbe:
             tcpSocket:
               port: 8000
