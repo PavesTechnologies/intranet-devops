@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/PavesTechnologies/intranet-devops
-    targetRevision: main
+    targetRevision: dev
     path: k8s/ingress
   destination:
     server: https://kubernetes.default.svc
