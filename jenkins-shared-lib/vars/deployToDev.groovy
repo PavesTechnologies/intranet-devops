@@ -41,19 +41,6 @@ def call(Map config) {
       stage('Build Image') {
         steps {
           script {
-            if (serviceType == 'java') {
-              // Java — build JAR first then Docker image
-              sh """
-                echo "Running Maven build..."
-                if [ -f "./mvnw" ]; then
-                  ./mvnw clean package -DskipTests -q
-                else
-                  mvn clean package -DskipTests -q
-                fi
-                echo "Maven build complete."
-              """
-            }
-
             sh """
               echo "Building ARM64 Docker image..."
 
