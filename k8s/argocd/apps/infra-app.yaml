@@ -12,7 +12,7 @@ spec:
     targetRevision: dev
     path: k8s/infra
     directory:
-      recurse: true        ← this is the fix
+      recurse: true
   destination:
     server: https://kubernetes.default.svc
     namespace: infra
