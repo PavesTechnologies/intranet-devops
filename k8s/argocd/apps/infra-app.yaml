@@ -11,6 +11,8 @@ spec:
     repoURL: https://github.com/PavesTechnologies/intranet-devops
     targetRevision: dev
     path: k8s/infra
+    directory:
+      recurse: true        ← this is the fix
   destination:
     server: https://kubernetes.default.svc
     namespace: infra
