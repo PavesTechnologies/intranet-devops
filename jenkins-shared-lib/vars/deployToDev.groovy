@@ -96,7 +96,7 @@ def call(Map config) {
               ssh -o StrictHostKeyChecking=no \
                   -i \$SSH_KEY \
                   ubuntu@${ec2Host} \
-                  "~/k8s/update-secret.sh ${serviceName}"
+                  "~/k8s/sync-secrets.sh"
               echo "Secrets synced."
             """
           }
@@ -120,7 +120,7 @@ def call(Map config) {
               cd /tmp/gitops
               git checkout ${branch}
               DEPLOY="k8s/backend/${serviceName}/deployment.yaml"
-              sed -i "s|image:.*${ecrRepo}.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
+              sed -i "s|^          image:.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
               git config user.email "jenkins@pavestechnologies.com"
               git config user.name  "Jenkins CD"
               git add \$DEPLOY
@@ -142,8 +142,23 @@ def call(Map config) {
       failure {
         echo "FAILED: ${serviceName} deployment failed"
       }
-      always {
-        sh "docker rmi ${env.FULL_IMAGE} || true"
+        always {
+        script {
+          echo "Post-build cleanup..."
+
+          // Remove built image from local daemon
+          sh "docker rmi ${env.FULL_IMAGE} 2>/dev/null || true"
+
+          // Remove dangling images and build cache
+          sh "docker image prune -f || true"
+          sh "docker builder prune -af || true"
+
+          // Clean workspace
+          cleanWs()
+
+          sh "df -h"
+          echo "Cleanup complete."
+        }
       }
     }
   }
