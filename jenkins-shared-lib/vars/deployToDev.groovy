@@ -54,6 +54,7 @@ def call(Map config) {
               docker buildx build \\
                 --platform linux/arm64 \\
                 --load \\
+                --file  arm.Dockerfile \\
                 --tag ${env.FULL_IMAGE} \\
                 .
 
