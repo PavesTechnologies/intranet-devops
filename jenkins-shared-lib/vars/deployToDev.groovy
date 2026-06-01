@@ -37,17 +37,17 @@ def call(Map config) {
       stage('Build Image') {
         steps {
           script {
-            if (serviceType == 'java') {
-              sh '''
-                echo "Running Maven build..."
-                if [ -f "./mvnw" ]; then
-                  ./mvnw clean package -DskipTests -q
-                else
-                  mvn clean package -DskipTests -q
-                fi
-                echo "Maven build complete."
-              '''
-            }
+            // if (serviceType == 'java') {
+            //   sh '''
+            //     echo "Running Maven build..."
+            //     if [ -f "./mvnw" ]; then
+            //       ./mvnw clean package -DskipTests -q
+            //     else
+            //       mvn clean package -DskipTests -q
+            //     fi
+            //     echo "Maven build complete."
+            //   '''
+            // }
             sh """
               docker buildx inspect paves-builder > /dev/null 2>&1 || \
                 docker buildx create --name paves-builder --use
@@ -107,7 +107,7 @@ def call(Map config) {
         steps {
           withCredentials([
             usernamePassword(
-              credentialsId:     'github-pat',
+              credentialsId:     'all-cred',
               usernameVariable:  'GIT_USER',
               passwordVariable:  'GIT_TOKEN'
             )
