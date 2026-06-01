@@ -142,8 +142,23 @@ def call(Map config) {
       failure {
         echo "FAILED: ${serviceName} deployment failed"
       }
-      always {
-        sh "docker rmi ${env.FULL_IMAGE} || true"
+        always {
+        script {
+          echo "Post-build cleanup..."
+
+          // Remove built image from local daemon
+          sh "docker rmi ${env.FULL_IMAGE} 2>/dev/null || true"
+
+          // Remove dangling images and build cache
+          sh "docker image prune -f || true"
+          sh "docker builder prune -af || true"
+
+          // Clean workspace
+          cleanWs()
+
+          sh "df -h"
+          echo "Cleanup complete."
+        }
       }
     }
   }
