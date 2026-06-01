@@ -24,7 +24,7 @@ spec:
             - containerPort: 5540
           resources:
             requests:
-              cpu: "100m"
+              cpu: "50m"
               memory: "128Mi"
             limits:
               cpu: "500m"
@@ -41,7 +41,8 @@ metadata:
 spec:
   selector:
     app: redis-insight
+  type: NodePort
   ports:
     - port: 5540
       targetPort: 5540
-  type: ClusterIP
+      nodePort: 30540

@@ -29,7 +29,7 @@ spec:
               value: "kafka-service.infra.svc.cluster.local:9092"
           resources:
             requests:
-              cpu: "100m"
+              cpu: "50m"
               memory: "256Mi"
             limits:
               cpu: "500m"
@@ -46,7 +46,8 @@ metadata:
 spec:
   selector:
     app: kafka-ui
+  type: NodePort
   ports:
     - port: 8080
       targetPort: 8080
-  type: ClusterIP
+      nodePort: 30800
