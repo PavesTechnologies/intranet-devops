@@ -114,7 +114,7 @@ spec:
       labels:
         app: kafka-ui
     spec:
-      volume:
+      volumes:
         - name: kafka-ui-config
           configMap:
             name: kafka-ui-config
@@ -159,7 +159,7 @@ spec:
                   key: devops_password
             - name: KAFKA_UI_AUTH_USERS_1_ROLES_0
               value: "DEVOPS"
-
+          
             # Readonly user
             - name: KAFKA_UI_AUTH_USERS_2_USERNAME
               valueFrom:
