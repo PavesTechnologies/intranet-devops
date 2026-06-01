@@ -96,7 +96,7 @@ def call(Map config) {
               ssh -o StrictHostKeyChecking=no \
                   -i \$SSH_KEY \
                   ubuntu@${ec2Host} \
-                  "~/k8s/update-secret.sh ${serviceName}"
+                  "~/k8s/sync-secrets.sh"
               echo "Secrets synced."
             """
           }
