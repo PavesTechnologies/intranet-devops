@@ -115,7 +115,7 @@ def call(Map config) {
         steps {
           withCredentials([
             usernamePassword(
-              credentialsId: 'github-pat',
+              credentialsId: 'all-cred',
               usernameVariable: 'GIT_USER',
               passwordVariable: 'GIT_TOKEN'
             )
