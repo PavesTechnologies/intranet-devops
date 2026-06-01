@@ -31,7 +31,7 @@ spec:
               echo "Kafka ready."
       containers:
         - name: debezium
-          image: debezium/connect:3.0.0.Final
+          image: debezium/connect:2.7.3.Final
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8083
