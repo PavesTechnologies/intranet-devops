@@ -120,7 +120,7 @@ def call(Map config) {
               cd /tmp/gitops
               git checkout ${branch}
               DEPLOY="k8s/backend/${serviceName}/deployment.yaml"
-              sed -i "s|image:.*${ecrRepo}.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
+              sed -i "s|^          image:.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
               git config user.email "jenkins@pavestechnologies.com"
               git config user.name  "Jenkins CD"
               git add \$DEPLOY
