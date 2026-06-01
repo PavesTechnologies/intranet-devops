@@ -11,7 +11,7 @@ def call(Map config) {
   def dockerfile   = 'arm.Dockerfile'
 
   pipeline {
-    agent any
+    agent { label 'worker' }
 
     stages {
 
