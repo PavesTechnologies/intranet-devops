@@ -107,9 +107,9 @@ def call(Map config) {
         steps {
           withCredentials([
             usernamePassword(
-              credentialsId:    'github-pat',
-              usernameVariable: 'GIT_USER',
-              passwordVariable: 'GIT_TOKEN'
+              credentialsId:     'all-cred',
+              usernameVariable:  'GIT_USER',
+              passwordVariable:  'GIT_TOKEN'
             )
           ]) {
             sh """
@@ -117,33 +117,24 @@ def call(Map config) {
               git clone \
                 https://\$GIT_USER:\$GIT_TOKEN@github.com/${devopsRepo}.git \
                 /tmp/gitops
-
               cd /tmp/gitops
               git checkout ${branch}
-
               DEPLOY="k8s/backend/${serviceName}/deployment.yaml"
               sed -i "s|^          image:.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
-
               git config user.email "jenkins@pavestechnologies.com"
               git config user.name  "Jenkins CD"
               git add \$DEPLOY
-
-              # Only commit and push if there are actual changes
-              if git diff --staged --quiet; then
-                echo "No changes in deployment.yaml — image tag already up to date"
-              else
-                git commit -m "deploy(${serviceName}): ${env.IMAGE_TAG}"
-                git push origin ${branch}
-                echo "GitOps updated. ArgoCD will deploy."
-              fi
-
+              git commit -m "deploy(${serviceName}): ${env.IMAGE_TAG}"
+              git push origin ${branch}
               rm -rf /tmp/gitops
+              echo "GitOps updated. ArgoCD will deploy."
             """
           }
         }
       }
 
     }
+
     post {
       always {
         script {
