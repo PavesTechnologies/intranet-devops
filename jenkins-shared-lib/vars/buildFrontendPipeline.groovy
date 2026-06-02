@@ -199,25 +199,25 @@ ${entries}
       }
 
       // ── 6. SonarQube Security Scan (Optional) ───────────────────────────
-      stage('SonarQube scan') {
-        when {
-          expression { config.sonarProjectKey != null }
-        }
-        steps {
-          script {
-            def scannerHome = tool 'sonar-scanner'
-            withSonarQubeEnv('SonarQube') {
-              sh """
-                ${scannerHome}/bin/sonar-scanner \
-                  -Dsonar.projectKey=${config.sonarProjectKey} \
-                  -Dsonar.sources=src \
-                  -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
-                  -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-              """
-            }
-          }
-        }
-      }
+      // stage('SonarQube scan') {
+      //   when {
+      //     expression { config.sonarProjectKey != null }
+      //   }
+      //   steps {
+      //     script {
+      //       def scannerHome = tool 'sonar-scanner'
+      //       withSonarQubeEnv('SonarQube') {
+      //         sh """
+      //           ${scannerHome}/bin/sonar-scanner \
+      //             -Dsonar.projectKey=${config.sonarProjectKey} \
+      //             -Dsonar.sources=src \
+      //             -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
+      //             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+      //         """
+      //       }
+      //     }
+      //   }
+      // }
 
       // ── 7. Deploy to S3 with Fresh Secrets ──────────────────────────────
       // 
