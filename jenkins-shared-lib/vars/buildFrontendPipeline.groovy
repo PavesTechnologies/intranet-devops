@@ -82,7 +82,7 @@ def call(Map config) {
                 serviceName: config.appName,
                 imageTag:    'building...',
                 branch:      env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown',
-                triggeredBy: sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim() ?: 'Unknown',
+                triggeredBy: 'Pending',  // Will be updated after Checkout stage
                 webhookUrl:  env.TEAMS_URL
               )
             }
@@ -94,7 +94,12 @@ def call(Map config) {
       stage('Checkout') {
         steps {
           checkout scm
+          script {
+            // Capture committer name NOW (before workspace is deleted in cleanup)
+            env.COMMITTER_NAME = sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim() ?: 'Unknown'
+          }
           echo "Checked out: ${env.BRANCH_NAME ?: env.CHANGE_BRANCH}"
+          echo "Committer: ${env.COMMITTER_NAME}"
         }
       }
 
@@ -160,7 +165,7 @@ ${entries}
         }
       }
 
-      // ── 6. SonarQube Security Scan (Optional) ───────────────────────────
+      // // ── 6. SonarQube Security Scan (Optional) ───────────────────────────
       // stage('SonarQube scan') {
       //   when {
       //     expression { config.sonarProjectKey != null }
@@ -295,7 +300,7 @@ ${entries}
               serviceName: config.appName,
               imageTag:    env.BUILD_NUMBER ?: 'success',
               branch:      env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown',
-              triggeredBy: sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim() ?: 'Unknown',
+              triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
               webhookUrl:  env.TEAMS_URL
             )
           }
@@ -318,7 +323,7 @@ ${entries}
               serviceName: config.appName,
               imageTag:    env.BUILD_NUMBER ?: 'failed',
               branch:      env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown',
-              triggeredBy: sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim() ?: 'Unknown',
+              triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
               webhookUrl:  env.TEAMS_URL
             )
           }
