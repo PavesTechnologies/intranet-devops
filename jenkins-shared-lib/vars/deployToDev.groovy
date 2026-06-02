@@ -140,7 +140,51 @@ def call(Map config) {
         echo "SUCCESS: ${serviceName} deployed → ${env.FULL_IMAGE}"
       }
       failure {
-        echo "FAILED: ${serviceName} deployment failed"
+          script {
+          // Get the committer email dynamically
+          def committerEmail = sh(
+            script: 'git log -1 --format="%ae"',
+            returnStdout: true
+          ).trim()
+
+          def committerName = sh(
+            script: 'git log -1 --format="%an"',
+            returnStdout: true
+          ).trim()
+
+          def commitMessage = sh(
+            script: 'git log -1 --format="%s"',
+            returnStdout: true
+          ).trim()
+
+          echo "Sending failure email to: ${committerEmail}"
+
+          emailext(
+            to:       "${committerEmail}",
+            subject:  "❌ CD Pipeline Failed — ${serviceName} [${env.IMAGE_TAG}]",
+            body:     """
+                    Hi ${committerName},
+                    
+                    Your recent commit triggered a CD pipeline that has FAILED.
+                    
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      Service    : ${serviceName}
+                      Branch     : ${branch}
+                      Image Tag  : ${env.IMAGE_TAG}
+                      Commit     : ${env.SHORT_SHA}
+                      Message    : ${commitMessage}
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    
+                    Please check the build logs and fix the issue.
+                    
+                    Build URL: ${env.BUILD_URL}
+                    
+                    Thanks,
+                    Paves Jenkins CD
+                                """,
+                                mimeType: 'text/plain'
+          )
+        }
       }
         always {
         script {
