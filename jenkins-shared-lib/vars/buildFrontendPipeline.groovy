@@ -70,7 +70,53 @@ def call(Map config) {
 
     stages {
 
-      // ── 1. Notify Teams — Build Started ────────────────────────────────
+      // ── 1. Checkout ────────────────────────────────────────────────────
+      stage('Checkout') {
+        steps {
+          checkout scm
+          script {
+            // ════════════════════════════════════════════════════════════
+            // BRANCH NAME DETECTION
+            // ════════════════════════════════════════════════════════════
+            // Try multiple sources for branch name:
+            // 1. env.BRANCH_NAME (Multibranch Pipeline)
+            // 2. env.GIT_BRANCH (Git plugin format: origin/main → main)
+            // 3. git symbolic-ref (what we're actually on)
+            // 4. env.CHANGE_BRANCH (Pull Request)
+            
+            env.DETECTED_BRANCH = env.BRANCH_NAME
+            if (!env.DETECTED_BRANCH || env.DETECTED_BRANCH == 'null') {
+              env.DETECTED_BRANCH = env.GIT_BRANCH?.replaceAll('origin/', '')?.replaceAll('refs/heads/', '')
+            }
+            if (!env.DETECTED_BRANCH || env.DETECTED_BRANCH == 'null') {
+              env.DETECTED_BRANCH = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+            }
+            if (!env.DETECTED_BRANCH || env.DETECTED_BRANCH == 'null') {
+              env.DETECTED_BRANCH = env.CHANGE_BRANCH ?: 'unknown'
+            }
+
+            // ════════════════════════════════════════════════════════════
+            // COMMITTER NAME CAPTURE
+            // ════════════════════════════════════════════════════════════
+            try {
+              env.COMMITTER_NAME = sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim()
+              if (!env.COMMITTER_NAME || env.COMMITTER_NAME == 'null' || env.COMMITTER_NAME.isEmpty()) {
+                env.COMMITTER_NAME = 'Unknown'
+              }
+            } catch (Exception e) {
+              env.COMMITTER_NAME = 'Unknown'
+            }
+
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "✅ Checkout Complete"
+            echo "Branch: ${env.DETECTED_BRANCH}"
+            echo "Committer: ${env.COMMITTER_NAME}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          }
+        }
+      }
+
+      // ── 2. Notify Teams — Build Started ────────────────────────────────
       stage('Notify Teams') {
         steps {
           withCredentials([
@@ -81,25 +127,12 @@ def call(Map config) {
                 status:      'STARTED',
                 serviceName: config.appName,
                 imageTag:    'building...',
-                branch:      env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown',
-                triggeredBy: 'Pending',  // Will be updated after Checkout stage
+                branch:      env.DETECTED_BRANCH ?: 'unknown',
+                triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
                 webhookUrl:  env.TEAMS_URL
               )
             }
           }
-        }
-      }
-
-      // ── 2. Checkout ────────────────────────────────────────────────────
-      stage('Checkout') {
-        steps {
-          checkout scm
-          script {
-            // Capture committer name NOW (before workspace is deleted in cleanup)
-            env.COMMITTER_NAME = sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim() ?: 'Unknown'
-          }
-          echo "Checked out: ${env.BRANCH_NAME ?: env.CHANGE_BRANCH}"
-          echo "Committer: ${env.COMMITTER_NAME}"
         }
       }
 
@@ -165,26 +198,26 @@ ${entries}
         }
       }
 
-      // // ── 6. SonarQube Security Scan (Optional) ───────────────────────────
-      // stage('SonarQube scan') {
-      //   when {
-      //     expression { config.sonarProjectKey != null }
-      //   }
-      //   steps {
-      //     script {
-      //       def scannerHome = tool 'sonar-scanner'
-      //       withSonarQubeEnv('SonarQube') {
-      //         sh """
-      //           ${scannerHome}/bin/sonar-scanner \
-      //             -Dsonar.projectKey=${config.sonarProjectKey} \
-      //             -Dsonar.sources=src \
-      //             -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
-      //             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-      //         """
-      //       }
-      //     }
-      //   }
-      // }
+      // ── 6. SonarQube Security Scan (Optional) ───────────────────────────
+      stage('SonarQube scan') {
+        when {
+          expression { config.sonarProjectKey != null }
+        }
+        steps {
+          script {
+            def scannerHome = tool 'sonar-scanner'
+            withSonarQubeEnv('SonarQube') {
+              sh """
+                ${scannerHome}/bin/sonar-scanner \
+                  -Dsonar.projectKey=${config.sonarProjectKey} \
+                  -Dsonar.sources=src \
+                  -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
+                  -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+              """
+            }
+          }
+        }
+      }
 
       // ── 7. Deploy to S3 with Fresh Secrets ──────────────────────────────
       // 
@@ -299,7 +332,7 @@ ${entries}
               status:      'SUCCESS',
               serviceName: config.appName,
               imageTag:    env.BUILD_NUMBER ?: 'success',
-              branch:      env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown',
+              branch:      env.DETECTED_BRANCH ?: 'unknown',
               triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
               webhookUrl:  env.TEAMS_URL
             )
@@ -322,7 +355,7 @@ ${entries}
               status:      'FAILURE',
               serviceName: config.appName,
               imageTag:    env.BUILD_NUMBER ?: 'failed',
-              branch:      env.BRANCH_NAME ?: env.CHANGE_BRANCH ?: 'unknown',
+              branch:      env.DETECTED_BRANCH ?: 'unknown',
               triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
               webhookUrl:  env.TEAMS_URL
             )
