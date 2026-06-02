@@ -233,25 +233,24 @@ ${entries}
             echo "✅ Re-generated ${config.buildDir}/config.js with fresh secrets"
 
             // Upload entire dist/ to S3 bucket root
-            def s3Uri = "s3://${config.s3Bucket}/"
-            echo "📤 Uploading ${config.buildDir}/ → ${s3Uri}"
+            echo "📤 Uploading ${config.buildDir}/ to S3 bucket: ${config.s3Bucket}"
 
-            sh """
+            sh '''
               # Main sync — uploads all files with general cache policy
-              aws s3 sync ${config.buildDir}/ ${s3Uri} \
+              aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ \
                 --delete \
-                --region ${config.awsRegion} \
+                --region $AWS_DEFAULT_REGION \
                 --cache-control "public, max-age=3600"
               
               # Explicitly set config.js to no-cache/no-store
               # This ensures browser NEVER caches the config, always fetches fresh
-              aws s3 cp ${config.buildDir}/config.js ${s3Uri}config.js \
-                --region ${config.awsRegion} \
+              aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js \
+                --region $AWS_DEFAULT_REGION \
                 --cache-control "no-store, must-revalidate" \
                 --metadata "deployment-time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 --content-type "application/javascript"
-            """
-            echo "✅ S3 deployment complete — all files uploaded to ${s3Uri}"
+            '''
+            echo "✅ S3 deployment complete — all files uploaded"
           }
         }
       }
@@ -263,13 +262,13 @@ ${entries}
         steps {
           script {
             echo "🔄 Invalidating CloudFront distribution: ${config.cloudfrontId}"
-            sh """
+            sh '''
               aws cloudfront create-invalidation \
-                --distribution-id ${config.cloudfrontId} \
+                --distribution-id $CF_DIST_ID \
                 --paths "/*" \
-                --region ${config.awsRegion}
+                --region $AWS_DEFAULT_REGION
               echo "✅ CloudFront invalidation created (path: /*)"
-            """
+            '''
           }
         }
       }
