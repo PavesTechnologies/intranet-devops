@@ -34,104 +34,104 @@ def call(Map config) {
         }
       }
 
-      stage('Build Image') {
-        steps {
-          script {
-            // if (serviceType == 'java') {
-            //   sh '''
-            //     echo "Running Maven build..."
-            //     if [ -f "./mvnw" ]; then
-            //       ./mvnw clean package -DskipTests -q
-            //     else
-            //       mvn clean package -DskipTests -q
-            //     fi
-            //     echo "Maven build complete."
-            //   '''
-            // }
-            sh """
-              docker buildx inspect paves-builder > /dev/null 2>&1 || \
-                docker buildx create --name paves-builder --use
-              docker buildx use paves-builder
-              docker buildx build \
-                --platform linux/arm64 \
-                --load \
-                --file ${dockerfile} \
-                --tag ${env.FULL_IMAGE} \
-                .
-              echo "Image built: ${env.FULL_IMAGE}"
-            """
-          }
-        }
-      }
+      // stage('Build Image') {
+      //   steps {
+      //     script {
+      //       // if (serviceType == 'java') {
+      //       //   sh '''
+      //       //     echo "Running Maven build..."
+      //       //     if [ -f "./mvnw" ]; then
+      //       //       ./mvnw clean package -DskipTests -q
+      //       //     else
+      //       //       mvn clean package -DskipTests -q
+      //       //     fi
+      //       //     echo "Maven build complete."
+      //       //   '''
+      //       // }
+      //       sh """
+      //         docker buildx inspect paves-builder > /dev/null 2>&1 || \
+      //           docker buildx create --name paves-builder --use
+      //         docker buildx use paves-builder
+      //         docker buildx build \
+      //           --platform linux/arm64 \
+      //           --load \
+      //           --file ${dockerfile} \
+      //           --tag ${env.FULL_IMAGE} \
+      //           .
+      //         echo "Image built: ${env.FULL_IMAGE}"
+      //       """
+      //     }
+      //   }
+      // }
 
-      stage('Push to ECR') {
-        steps {
-          withCredentials([
-            [
-              $class:            'AmazonWebServicesCredentialsBinding',
-              credentialsId:     'aws-ecr-credentials',
-              accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-              secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-            ]
-          ]) {
-            sh """
-              aws ecr get-login-password --region ${region} | \
-                docker login --username AWS --password-stdin ${ecrRegistry}
-              docker push ${env.FULL_IMAGE}
-              echo "Pushed: ${env.FULL_IMAGE}"
-            """
-          }
-        }
-      }
+      // stage('Push to ECR') {
+      //   steps {
+      //     withCredentials([
+      //       [
+      //         $class:            'AmazonWebServicesCredentialsBinding',
+      //         credentialsId:     'aws-ecr-credentials',
+      //         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+      //         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+      //       ]
+      //     ]) {
+      //       sh """
+      //         aws ecr get-login-password --region ${region} | \
+      //           docker login --username AWS --password-stdin ${ecrRegistry}
+      //         docker push ${env.FULL_IMAGE}
+      //         echo "Pushed: ${env.FULL_IMAGE}"
+      //       """
+      //     }
+      //   }
+      // }
 
-      stage('Sync Secrets on EC2') {
-        steps {
-          withCredentials([
-            sshUserPrivateKey(
-              credentialsId: 'ec2-ssh-key',
-              keyFileVariable: 'SSH_KEY'
-            )
-          ]) {
-            sh """
-              ssh -o StrictHostKeyChecking=no \
-                  -i \$SSH_KEY \
-                  ubuntu@${ec2Host} \
-                  "~/k8s/sync-secrets.sh"
-              echo "Secrets synced."
-            """
-          }
-        }
-      }
+      // stage('Sync Secrets on EC2') {
+      //   steps {
+      //     withCredentials([
+      //       sshUserPrivateKey(
+      //         credentialsId: 'ec2-ssh-key',
+      //         keyFileVariable: 'SSH_KEY'
+      //       )
+      //     ]) {
+      //       sh """
+      //         ssh -o StrictHostKeyChecking=no \
+      //             -i \$SSH_KEY \
+      //             ubuntu@${ec2Host} \
+      //             "~/k8s/sync-secrets.sh"
+      //         echo "Secrets synced."
+      //       """
+      //     }
+      //   }
+      // }
 
-      stage('Update GitOps Repo') {
-        steps {
-          withCredentials([
-            usernamePassword(
-              credentialsId:     'all-cred',
-              usernameVariable:  'GIT_USER',
-              passwordVariable:  'GIT_TOKEN'
-            )
-          ]) {
-            sh """
-              rm -rf /tmp/gitops
-              git clone \
-                https://\$GIT_USER:\$GIT_TOKEN@github.com/${devopsRepo}.git \
-                /tmp/gitops
-              cd /tmp/gitops
-              git checkout ${branch}
-              DEPLOY="k8s/backend/${serviceName}/deployment.yaml"
-              sed -i "s|^          image:.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
-              git config user.email "jenkins@pavestechnologies.com"
-              git config user.name  "Jenkins CD"
-              git add \$DEPLOY
-              git commit -m "deploy(${serviceName}): ${env.IMAGE_TAG}"
-              git push origin ${branch}
-              rm -rf /tmp/gitops
-              echo "GitOps updated. ArgoCD will deploy."
-            """
-          }
-        }
-      }
+      // stage('Update GitOps Repo') {
+      //   steps {
+      //     withCredentials([
+      //       usernamePassword(
+      //         credentialsId:     'all-cred',
+      //         usernameVariable:  'GIT_USER',
+      //         passwordVariable:  'GIT_TOKEN'
+      //       )
+      //     ]) {
+      //       sh """
+      //         rm -rf /tmp/gitops
+      //         git clone \
+      //           https://\$GIT_USER:\$GIT_TOKEN@github.com/${devopsRepo}.git \
+      //           /tmp/gitops
+      //         cd /tmp/gitops
+      //         git checkout ${branch}
+      //         DEPLOY="k8s/backend/${serviceName}/deployment.yaml"
+      //         sed -i "s|^          image:.*|          image: ${env.FULL_IMAGE}|g" \$DEPLOY
+      //         git config user.email "jenkins@pavestechnologies.com"
+      //         git config user.name  "Jenkins CD"
+      //         git add \$DEPLOY
+      //         git commit -m "deploy(${serviceName}): ${env.IMAGE_TAG}"
+      //         git push origin ${branch}
+      //         rm -rf /tmp/gitops
+      //         echo "GitOps updated. ArgoCD will deploy."
+      //       """
+      //     }
+      //   }
+      // }
 
     }
       post {
