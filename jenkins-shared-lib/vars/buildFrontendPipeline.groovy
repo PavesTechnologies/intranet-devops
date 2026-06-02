@@ -49,6 +49,38 @@ def call(Map config) {
   config.awsRegion   = config.awsRegion   ?: 'ap-south-1'
   config.buildDir    = config.buildDir    ?: 'dist'
 
+  // ════════════════════════════════════════════════════════════════════════
+  // SECOND-LAYER PROTECTION: Prevent accidental runs on wrong branch
+  // (First layer is in Jenkinsfile itself)
+  // ════════════════════════════════════════════════════════════════════════
+  
+  def getPipelineBranch() {
+    def b = env.BRANCH_NAME
+    if (!b || b == 'null') b = env.GIT_BRANCH?.replaceAll('origin/', '')?.replaceAll('refs/heads/', '')
+    if (!b || b == 'null') {
+      try {
+        b = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+      } catch (e) { }
+    }
+    return b ?: 'unknown'
+  }
+
+  def runtimeBranch = getPipelineBranch()
+  
+  if (runtimeBranch != 'dev') {
+    error """
+    ╔════════════════════════════════════════════════════════════════╗
+    ║ ❌ PIPELINE GUARD FAILURE                                      ║
+    ╠════════════════════════════════════════════════════════════════╣
+    ║ Branch: ${runtimeBranch.padRight(53)} ║
+    ║ Expected: dev                                                  ║
+    ║                                                                ║
+    ║ This pipeline is locked to 'dev' branch only.                  ║
+    ║ Accidental execution on other branches is blocked.             ║
+    ╚════════════════════════════════════════════════════════════════╝
+    """
+  }
+
   def runtimeCfg = [:]
 
   pipeline {
