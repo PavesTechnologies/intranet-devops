@@ -49,38 +49,6 @@ def call(Map config) {
   config.awsRegion   = config.awsRegion   ?: 'ap-south-1'
   config.buildDir    = config.buildDir    ?: 'dist'
 
-  // ════════════════════════════════════════════════════════════════════════
-  // SECOND-LAYER PROTECTION: Prevent accidental runs on wrong branch
-  // (First layer is in Jenkinsfile itself)
-  // ════════════════════════════════════════════════════════════════════════
-  
-  def getPipelineBranch() {
-    def b = env.BRANCH_NAME
-    if (!b || b == 'null') b = env.GIT_BRANCH?.replaceAll('origin/', '')?.replaceAll('refs/heads/', '')
-    if (!b || b == 'null') {
-      try {
-        b = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
-      } catch (e) { }
-    }
-    return b ?: 'unknown'
-  }
-
-  def runtimeBranch = getPipelineBranch()
-  
-  if (runtimeBranch != 'dev') {
-    error """
-    ╔════════════════════════════════════════════════════════════════╗
-    ║ ❌ PIPELINE GUARD FAILURE                                      ║
-    ╠════════════════════════════════════════════════════════════════╣
-    ║ Branch: ${runtimeBranch.padRight(53)} ║
-    ║ Expected: dev                                                  ║
-    ║                                                                ║
-    ║ This pipeline is locked to 'dev' branch only.                  ║
-    ║ Accidental execution on other branches is blocked.             ║
-    ╚════════════════════════════════════════════════════════════════╝
-    """
-  }
-
   def runtimeCfg = [:]
 
   pipeline {
@@ -102,7 +70,46 @@ def call(Map config) {
 
     stages {
 
-      // ── 1. Checkout ────────────────────────────────────────────────────
+      // ── 1. Branch Guard ─────────────────────────────────────────────────
+      // Prevent accidental runs on wrong branches
+      stage('Branch Guard') {
+        steps {
+          script {
+            // Detect current branch
+            def currentBranch = env.BRANCH_NAME
+            if (!currentBranch || currentBranch == 'null') {
+              currentBranch = env.GIT_BRANCH?.replaceAll('origin/', '')?.replaceAll('refs/heads/', '')
+            }
+            if (!currentBranch || currentBranch == 'null') {
+              try {
+                currentBranch = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+              } catch (e) {
+                currentBranch = env.CHANGE_BRANCH ?: 'unknown'
+              }
+            }
+
+            // Check if branch is 'dev'
+            if (currentBranch != 'dev') {
+              echo """
+╔════════════════════════════════════════════════════════════════╗
+║ ❌ PIPELINE GUARD FAILURE                                      ║
+╠════════════════════════════════════════════════════════════════╣
+║ Branch: ${currentBranch.padRight(53)} ║
+║ Expected: dev                                                  ║
+║                                                                ║
+║ This pipeline is locked to 'dev' branch only.                  ║
+║ Accidental execution on other branches is blocked.             ║
+╚════════════════════════════════════════════════════════════════╝
+              """
+              error "Pipeline only runs on 'dev' branch. Current: ${currentBranch}"
+            }
+            
+            echo "✅ Branch guard passed: Current branch is 'dev'"
+          }
+        }
+      }
+
+      // ── 2. Checkout ────────────────────────────────────────────────────
       stage('Checkout') {
         steps {
           checkout scm
@@ -148,7 +155,7 @@ def call(Map config) {
         }
       }
 
-      // ── 2. Notify Teams — Build Started ────────────────────────────────
+      // ── 3. Notify Teams — Build Started ────────────────────────────────
       stage('Notify Teams') {
         steps {
           withCredentials([
@@ -159,7 +166,7 @@ def call(Map config) {
                 status:      'STARTED',
                 serviceName: config.appName,
                 imageTag:    'building...',
-                branch:      env.DETECTED_BRANCH ?: 'unknown',
+                branch:      env.DETECTED_BRANCH ?: 'dev',
                 triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
                 webhookUrl:  env.TEAMS_URL
               )
@@ -168,7 +175,7 @@ def call(Map config) {
         }
       }
 
-      // ── 3. Install Dependencies ─────────────────────────────────────────
+      // ── 4. Install Dependencies ─────────────────────────────────────────
       stage('Install dependencies') {
         steps {
           nodejs(nodeJSInstallationName: config.nodeVersion) {
@@ -180,7 +187,7 @@ def call(Map config) {
         }
       }
 
-      // ── 4. Build (Vite) ─────────────────────────────────────────────────
+      // ── 5. Build (Vite) ─────────────────────────────────────────────────
       stage('Build') {
         steps {
           nodejs(nodeJSInstallationName: config.nodeVersion) {
