@@ -134,10 +134,24 @@ def call(Map config) {
       }
 
     }
-
-    post {
+      post {
       always {
         script {
+          // Capture git info BEFORE cleaning workspace
+          env.COMMITTER_EMAIL = sh(
+            script: 'git log -1 --format="%ae" 2>/dev/null || echo "unknown"',
+            returnStdout: true
+          ).trim()
+          env.COMMITTER_NAME = sh(
+            script: 'git log -1 --format="%an" 2>/dev/null || echo "unknown"',
+            returnStdout: true
+          ).trim()
+          env.COMMIT_MESSAGE = sh(
+            script: 'git log -1 --format="%s" 2>/dev/null || echo "unknown"',
+            returnStdout: true
+          ).trim()
+
+          // Now clean
           echo "Post-build cleanup..."
           sh "docker rmi ${env.FULL_IMAGE} 2>/dev/null || true"
           sh "docker image prune -f || true"
@@ -150,27 +164,18 @@ def call(Map config) {
 
       success {
         script {
-          def committerEmail  = sh(script: 'git log -1 --format="%ae"', returnStdout: true).trim()
-          def committerName   = sh(script: 'git log -1 --format="%an"', returnStdout: true).trim()
-          def commitMessage   = sh(script: 'git log -1 --format="%s"',  returnStdout: true).trim()
-
-          echo "Sending success email to: ${committerEmail}"
-
           emailext(
-            to:       "${committerEmail}",
+            to:       "${env.COMMITTER_EMAIL}",
             subject:  "✅ CD Pipeline Success — ${serviceName} [${env.IMAGE_TAG}]",
             mimeType: 'text/html',
             body:     """
 <html>
 <body style="font-family: Arial, sans-serif; color: #2C3E50;">
-
   <div style="background:#1E8449; color:white; padding:16px; border-radius:6px;">
     <h2 style="margin:0;">✅ Deployment Successful</h2>
     <p style="margin:4px 0 0 0;">Service: <strong>${serviceName}</strong></p>
   </div>
-
   <br/>
-
   <table style="border-collapse:collapse; width:100%;">
     <tr style="background:#D5F5E3;">
       <td style="padding:10px; border:1px solid #ccc; width:30%;"><strong>Service</strong></td>
@@ -190,26 +195,24 @@ def call(Map config) {
     </tr>
     <tr style="background:#D5F5E3;">
       <td style="padding:10px; border:1px solid #ccc;"><strong>Commit Message</strong></td>
-      <td style="padding:10px; border:1px solid #ccc;">${commitMessage}</td>
+      <td style="padding:10px; border:1px solid #ccc;">${env.COMMIT_MESSAGE}</td>
     </tr>
     <tr>
       <td style="padding:10px; border:1px solid #ccc;"><strong>Deployed By</strong></td>
-      <td style="padding:10px; border:1px solid #ccc;">${committerName}</td>
+      <td style="padding:10px; border:1px solid #ccc;">${env.COMMITTER_NAME}</td>
     </tr>
     <tr style="background:#D5F5E3;">
       <td style="padding:10px; border:1px solid #ccc;"><strong>Build URL</strong></td>
       <td style="padding:10px; border:1px solid #ccc;"><a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td>
     </tr>
   </table>
-
   <br/>
   <div style="background:#D5F5E3; padding:12px; border-radius:6px; border-left:4px solid #1E8449;">
     <p style="margin:0;">
-      ✅ ArgoCD has been notified and will deploy the new image automatically.<br/>
+      ✅ ArgoCD has been notified and will deploy automatically.<br/>
       Monitor at: <a href="https://13.207.112.154:30452">ArgoCD Dashboard</a>
     </p>
   </div>
-
   <br/>
   <p style="color:#888; font-size:12px;">Paves Technologies — Jenkins CD Pipeline</p>
 </body>
@@ -221,27 +224,18 @@ def call(Map config) {
 
       failure {
         script {
-          def committerEmail  = sh(script: 'git log -1 --format="%ae"', returnStdout: true).trim()
-          def committerName   = sh(script: 'git log -1 --format="%an"', returnStdout: true).trim()
-          def commitMessage   = sh(script: 'git log -1 --format="%s"',  returnStdout: true).trim()
-
-          echo "Sending failure email to: ${committerEmail}"
-
           emailext(
-            to:       "${committerEmail}",
+            to:       "${env.COMMITTER_EMAIL}",
             subject:  "❌ CD Pipeline Failed — ${serviceName} [${env.IMAGE_TAG}]",
             mimeType: 'text/html',
             body:     """
 <html>
 <body style="font-family: Arial, sans-serif; color: #2C3E50;">
-
   <div style="background:#922B21; color:white; padding:16px; border-radius:6px;">
     <h2 style="margin:0;">❌ Deployment Failed</h2>
     <p style="margin:4px 0 0 0;">Service: <strong>${serviceName}</strong></p>
   </div>
-
   <br/>
-
   <table style="border-collapse:collapse; width:100%;">
     <tr style="background:#FADBD8;">
       <td style="padding:10px; border:1px solid #ccc; width:30%;"><strong>Service</strong></td>
@@ -261,27 +255,25 @@ def call(Map config) {
     </tr>
     <tr style="background:#FADBD8;">
       <td style="padding:10px; border:1px solid #ccc;"><strong>Commit Message</strong></td>
-      <td style="padding:10px; border:1px solid #ccc;">${commitMessage}</td>
+      <td style="padding:10px; border:1px solid #ccc;">${env.COMMIT_MESSAGE}</td>
     </tr>
     <tr>
       <td style="padding:10px; border:1px solid #ccc;"><strong>Committed By</strong></td>
-      <td style="padding:10px; border:1px solid #ccc;">${committerName}</td>
+      <td style="padding:10px; border:1px solid #ccc;">${env.COMMITTER_NAME}</td>
     </tr>
     <tr style="background:#FADBD8;">
       <td style="padding:10px; border:1px solid #ccc;"><strong>Build URL</strong></td>
       <td style="padding:10px; border:1px solid #ccc;"><a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td>
     </tr>
   </table>
-
   <br/>
   <div style="background:#FADBD8; padding:12px; border-radius:6px; border-left:4px solid #922B21;">
     <p style="margin:0;">
-      ❌ The deployment did NOT go through.<br/>
-      Please check the build logs and fix the issue before merging again.<br/>
+      ❌ Deployment did NOT go through.<br/>
+      Please fix the issue before merging again.<br/>
       <a href="${env.BUILD_URL}console">View Console Output →</a>
     </p>
   </div>
-
   <br/>
   <p style="color:#888; font-size:12px;">Paves Technologies — Jenkins CD Pipeline</p>
 </body>
