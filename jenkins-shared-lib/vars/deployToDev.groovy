@@ -20,9 +20,11 @@ def call(Map config) {
           checkout scm
           script {
             env.SHORT_SHA  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            env.COMMITTER  = sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim()
             env.IMAGE_TAG  = "${branch}-${env.SHORT_SHA}"
             env.FULL_IMAGE = "${ecrRegistry}/${ecrRepo}:${env.IMAGE_TAG}"
             echo "Image: ${env.FULL_IMAGE}"
+            echo "Triggered by: ${env.COMMITTER}"
             sh """
               if [ ! -f "${dockerfile}" ]; then
                 echo "ERROR: ${dockerfile} not found"
@@ -48,6 +50,7 @@ def call(Map config) {
                 serviceName: serviceName,
                 imageTag:    'building...',
                 branch:      branch,
+                triggeredBy: env.COMMITTER ?: 'Unknown',
                 webhookUrl:  env.TEAMS_URL
               )
             }
@@ -57,17 +60,6 @@ def call(Map config) {
       stage('Build Image') {
         steps {
           script {
-            // if (serviceType == 'java') {
-            //   sh '''
-            //     echo "Running Maven build..."
-            //     if [ -f "./mvnw" ]; then
-            //       ./mvnw clean package -DskipTests -q
-            //     else
-            //       mvn clean package -DskipTests -q
-            //     fi
-            //     echo "Maven build complete."
-            //   '''
-            // }
             sh """
               docker buildx inspect paves-builder > /dev/null 2>&1 || \
                 docker buildx create --name paves-builder --use
@@ -170,6 +162,7 @@ def call(Map config) {
               serviceName: serviceName,
               imageTag:    env.IMAGE_TAG,
               branch:      branch,
+              triggeredBy: env.COMMITTER ?: 'Unknown',
               webhookUrl:  env.TEAMS_URL
             )
           }
@@ -189,6 +182,7 @@ def call(Map config) {
               serviceName: serviceName,
               imageTag:    env.IMAGE_TAG ?: 'unknown',
               branch:      branch,
+              triggeredBy: env.COMMITTER ?: 'Unknown',
               webhookUrl:  env.TEAMS_URL
             )
           }
