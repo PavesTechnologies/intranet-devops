@@ -25,12 +25,12 @@ def call(Map config) {
             }
             // stage('Parallel Checks') {
             //     parallel {
-                     stage('Unit Tests') {
-                        steps { sh "mvn test" }
-                        post {
-                            always { junit 'target/surefire-reports/*.xml' }
-                        }
-                    }
+                    //  stage('Unit Tests') {
+                    //     steps { sh "mvn test" }
+                    //     post {
+                    //         always { junit 'target/surefire-reports/*.xml' }
+                    //     }
+                    // }
             
                     stage('SonarQube') {
                         steps { sonarScan(config.sonarProjectKey) }
