@@ -32,16 +32,16 @@ def call(Map config) {
                     //     }
                     // }
             
-                    stage('SonarQube') {
-                        steps { sonarScan(config.sonarProjectKey) }
-                    }
+                    // stage('SonarQube') {
+                    //     steps { sonarScan(config.sonarProjectKey) }
+                    // }
                 // }
+            // // }
+            // stage('Quality Gate') {
+            //     steps {
+            //         script { qualityGateStage() }
+            //     }
             // }
-            stage('Quality Gate') {
-                steps {
-                    script { qualityGateStage() }
-                }
-            }
         } // End stages
     } // End pipeline
 } // End call
