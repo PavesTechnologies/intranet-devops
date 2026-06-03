@@ -108,7 +108,7 @@ def call(Map config) {
               ssh -o StrictHostKeyChecking=no \
                   -i \$SSH_KEY \
                   ubuntu@${ec2Host} \
-                  "~/k8s/sync-secrets.sh"
+                  "~/k8s/sync-secrets.sh && ~/refresh-ecr-k3s.sh"
               echo "Secrets synced."
             """
           }
