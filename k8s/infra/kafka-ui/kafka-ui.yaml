@@ -6,16 +6,16 @@ metadata:
 data:
   config.yml: |
     kafka:
-      cluster:
+      clusters:
         - name: paves-intranet-cdc
           bootstrapServers: kafka-service.infra.svc.cluster.local:9092
 
     auth:
       type: LOGIN_FORM
-    
+
     rbac:
       roles:
-      - name: ADMIN
+        - name: ADMIN
           clusters:
             - name: paves-intranet-cdc
               permissions:
@@ -28,7 +28,7 @@ data:
                 - resource: CONNECTOR
                   actions: [VIEW, CREATE, DELETE, EDIT]
 
-       - name: DEVOPS
+        - name: DEVOPS
           clusters:
             - name: paves-intranet-cdc
               permissions:
@@ -53,8 +53,8 @@ data:
                   actions: [VIEW]
                 - resource: BROKER
                   actions: [VIEW]
----
 
+---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -95,7 +95,6 @@ spec:
         property: readonly_password
 
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -132,7 +131,11 @@ spec:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: /etc/kafka-ui/config.yml
 
-           # Admin user
+            - name: KAFKA_CLUSTERS_0_NAME
+              value: "paves-intranet-cdc"
+            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+              value: "kafka-service.infra.svc.cluster.local:9092"
+
             - name: KAFKA_UI_AUTH_USERS_0_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -146,7 +149,6 @@ spec:
             - name: KAFKA_UI_AUTH_USERS_0_ROLES_0
               value: "ADMIN"
 
-            # DevOps user
             - name: KAFKA_UI_AUTH_USERS_1_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -159,8 +161,7 @@ spec:
                   key: devops_password
             - name: KAFKA_UI_AUTH_USERS_1_ROLES_0
               value: "DEVOPS"
-          
-            # Readonly user
+
             - name: KAFKA_UI_AUTH_USERS_2_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -174,12 +175,6 @@ spec:
             - name: KAFKA_UI_AUTH_USERS_2_ROLES_0
               value: "READONLY"
 
-
-          env:
-            - name: KAFKA_CLUSTERS_0_NAME
-              value: "paves-intranet-cdc"
-            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-              value: "kafka-service.infra.svc.cluster.local:9092"
           resources:
             requests:
               cpu: "100m"

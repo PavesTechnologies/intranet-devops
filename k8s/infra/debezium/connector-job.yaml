@@ -65,7 +65,7 @@ spec:
                     \"database.password\": \"$DB_PASSWORD\",
                     \"database.ssl.mode\": \"preferred\",
                     \"database.server.id\": \"184060\",
-                    \"topic.prefix\": \"eos\",
+                    \"topic.prefix\": \"eos_test\",
                     \"database.include.list\": \"eos\",
                     \"table.include.list\": \"eos.employee_details\",
                     \"schema.history.internal.kafka.bootstrap.servers\": \"kafka-service.infra.svc.cluster.local:9092\",
