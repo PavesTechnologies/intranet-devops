@@ -16,43 +16,37 @@ data:
     rbac:
       roles:
         - name: ADMIN
-          clusters:
-            - name: paves-intranet-cdc
-              permissions:
-                - resource: TOPIC
-                  actions: [VIEW, CREATE, DELETE, EDIT, MESSAGES_READ, MESSAGES_PRODUCE]
-                - resource: CONSUMER
-                  actions: [VIEW, DELETE, RESET_OFFSETS]
-                - resource: BROKER
-                  actions: [VIEW, EDIT]
-                - resource: CONNECTOR
-                  actions: [VIEW, CREATE, DELETE, EDIT]
+          permissions:
+            - resource: TOPIC
+              actions: [VIEW, CREATE, DELETE, EDIT, MESSAGES_READ, MESSAGES_PRODUCE]
+            - resource: CONSUMER
+              actions: [VIEW, DELETE, RESET_OFFSETS]
+            - resource: BROKER
+              actions: [VIEW, EDIT]
+            - resource: CONNECTOR
+              actions: [VIEW, CREATE, DELETE, EDIT]
 
         - name: DEVOPS
-          clusters:
-            - name: paves-intranet-cdc
-              permissions:
-                - resource: TOPIC
-                  actions: [VIEW, MESSAGES_READ]
-                - resource: CONSUMER
-                  actions: [VIEW, RESET_OFFSETS]
-                - resource: CONNECTOR
-                  actions: [VIEW, CREATE, EDIT]
-                - resource: BROKER
-                  actions: [VIEW]
+          permissions:
+            - resource: TOPIC
+              actions: [VIEW, MESSAGES_READ]
+            - resource: CONSUMER
+              actions: [VIEW, RESET_OFFSETS]
+            - resource: CONNECTOR
+              actions: [VIEW, CREATE, EDIT]
+            - resource: BROKER
+              actions: [VIEW]
 
         - name: READONLY
-          clusters:
-            - name: paves-intranet-cdc
-              permissions:
-                - resource: TOPIC
-                  actions: [VIEW, MESSAGES_READ]
-                - resource: CONSUMER
-                  actions: [VIEW]
-                - resource: CONNECTOR
-                  actions: [VIEW]
-                - resource: BROKER
-                  actions: [VIEW]
+          permissions:
+            - resource: TOPIC
+              actions: [VIEW, MESSAGES_READ]
+            - resource: CONSUMER
+              actions: [VIEW]
+            - resource: CONNECTOR
+              actions: [VIEW]
+            - resource: BROKER
+              actions: [VIEW]
 
 ---
 apiVersion: external-secrets.io/v1
