@@ -12,7 +12,7 @@ data:
 
 
 ---          
-apiversion: external-secrets.io/v1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: kafka-ui-credentials
