@@ -10,74 +10,9 @@ data:
         - name: paves-intranet-cdc
           bootstrapServers: kafka-service.infra.svc.cluster.local:9092
 
-    auth:
-      type: LOGIN_FORM
 
-    rbac:
-      roles:
-        - name: ADMIN
-          permissions:
-            - resource: TOPIC
-              actions:
-                - VIEW
-                - CREATE
-                - DELETE
-                - EDIT
-                - MESSAGES_READ
-                - MESSAGES_PRODUCE
-            - resource: CONSUMER
-              actions:
-                - VIEW
-                - DELETE
-                - RESET_OFFSETS
-            - resource: BROKER
-              actions:
-                - VIEW
-                - EDIT
-            - resource: CONNECTOR
-              actions:
-                - VIEW
-                - CREATE
-                - DELETE
-                - EDIT
-
-        - name: DEVOPS
-          permissions:
-            - resource: TOPIC
-              actions:
-                - VIEW
-                - MESSAGES_READ
-            - resource: CONSUMER
-              actions:
-                - VIEW
-                - MESSAGES_READ
-            - resource: CONNECTOR
-              actions:
-                - VIEW
-                - CREATE
-                - EDIT
-            - resource: BROKER
-              actions:
-                - VIEW
-
-        - name: READONLY
-          permissions:
-            - resource: TOPIC
-              actions:
-                - VIEW
-                - MESSAGES_READ
-            - resource: CONSUMER
-              actions:
-                - VIEW
-            - resource: CONNECTOR
-              actions:
-                - VIEW
-            - resource: BROKER
-              actions:
-                - VIEW
-
----
-apiVersion: external-secrets.io/v1
+---          
+apiversion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: kafka-ui-credentials
@@ -152,45 +87,6 @@ spec:
           env:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: /etc/kafka-ui/config.yml
-
-            - name: KAFKA_UI_AUTH_USERS_0_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-ui-credentials
-                  key: admin_username
-            - name: KAFKA_UI_AUTH_USERS_0_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-ui-credentials
-                  key: admin_password
-            - name: KAFKA_UI_AUTH_USERS_0_ROLES_0
-              value: "ADMIN"
-
-            - name: KAFKA_UI_AUTH_USERS_1_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-ui-credentials
-                  key: devops_username
-            - name: KAFKA_UI_AUTH_USERS_1_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-ui-credentials
-                  key: devops_password
-            - name: KAFKA_UI_AUTH_USERS_1_ROLES_0
-              value: "DEVOPS"
-
-            - name: KAFKA_UI_AUTH_USERS_2_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-ui-credentials
-                  key: readonly_username
-            - name: KAFKA_UI_AUTH_USERS_2_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-ui-credentials
-                  key: readonly_password
-            - name: KAFKA_UI_AUTH_USERS_2_ROLES_0
-              value: "READONLY"
 
           resources:
             requests:
