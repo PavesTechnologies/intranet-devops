@@ -125,11 +125,6 @@ spec:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: /etc/kafka-ui/config.yml
 
-            - name: KAFKA_CLUSTERS_0_NAME
-              value: "paves-intranet-cdc"
-            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-              value: "kafka-service.infra.svc.cluster.local:9092"
-
             - name: KAFKA_UI_AUTH_USERS_0_USERNAME
               valueFrom:
                 secretKeyRef:
