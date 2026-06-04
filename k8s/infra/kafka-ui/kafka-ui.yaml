@@ -18,35 +18,63 @@ data:
         - name: ADMIN
           permissions:
             - resource: TOPIC
-              actions: [VIEW, CREATE, DELETE, EDIT, MESSAGES_READ, MESSAGES_PRODUCE]
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
+                - MESSAGES_READ
+                - MESSAGES_PRODUCE]
             - resource: CONSUMER
-              actions: [VIEW, DELETE, RESET_OFFSETS]
+              actions:
+                - VIEW
+                - DELETE
+                - RESET_OFFSETS
             - resource: BROKER
-              actions: [VIEW, EDIT]
+              actions:
+                - VIEW
+                - EDIT
             - resource: CONNECTOR
-              actions: [VIEW, CREATE, DELETE, EDIT]
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
 
         - name: DEVOPS
           permissions:
             - resource: TOPIC
-              actions: [VIEW, MESSAGES_READ]
+              actions:
+                - VIEW
+                - MESSAGES_READ
             - resource: CONSUMER
-              actions: [VIEW, RESET_OFFSETS]
+              actions:
+                - VIEW
+                - MESSAGES_READ
             - resource: CONNECTOR
-              actions: [VIEW, CREATE, EDIT]
+              actions:
+                - VIEW
+                - CREATE
+                - EDIT
             - resource: BROKER
-              actions: [VIEW]
+              actions:
+                - VIEW
 
         - name: READONLY
           permissions:
             - resource: TOPIC
-              actions: [VIEW, MESSAGES_READ]
+              actions:
+                - VIEW
+                - MESSAGES_READ
             - resource: CONSUMER
-              actions: [VIEW]
+              actions:
+                - VIEW
             - resource: CONNECTOR
-              actions: [VIEW]
+              actions:
+                - VIEW
             - resource: BROKER
-              actions: [VIEW]
+              actions:
+                - VIEW
 
 ---
 apiVersion: external-secrets.io/v1
