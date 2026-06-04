@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: rms
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/rms-dev:version1
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/rms-dev:dev-d60a71d
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
