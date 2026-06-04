@@ -24,7 +24,7 @@ data:
                 - DELETE
                 - EDIT
                 - MESSAGES_READ
-                - MESSAGES_PRODUCE]
+                - MESSAGES_PRODUCE
             - resource: CONSUMER
               actions:
                 - VIEW
