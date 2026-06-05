@@ -266,7 +266,7 @@ ${entries}
 
               aws s3 sync $BUILD_DIR/_next/ s3://$S3_BUCKET/_next/ \
 
-                --region $AWS_DEFAULT_REGION \
+                --region ap-south-1 \
 
                 --cache-control "public, max-age=31536000, immutable"
  
@@ -280,7 +280,7 @@ ${entries}
 
                 --exclude "config.js" \
 
-                --region $AWS_DEFAULT_REGION \
+                --region ap-south-1 \
 
                 --cache-control "public, max-age=60"
  
