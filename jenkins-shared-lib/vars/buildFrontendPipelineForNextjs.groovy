@@ -288,7 +288,7 @@ ${entries}
 
               aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js \
 
-                --region $AWS_DEFAULT_REGION \
+                --region ap-south-1 \
 
                 --cache-control "no-store, must-revalidate" \
 
