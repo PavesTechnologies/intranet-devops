@@ -261,33 +261,16 @@ ${entries}
             echo "📤 Uploading ${config.buildDir}/ to S3 bucket: ${config.s3Bucket}"
 
             sh '''
-                  aws s3 sync $BUILD_DIR/_next/ s3://$S3_BUCKET/_next/ \
-                
-                    --region $AWS_DEFAULT_REGION \
-                
-                    --cache-control "public, max-age=31536000, immutable"
-                 
-                  aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ \
-                
-                    --delete \
-                
-                    --exclude "_next/*" \
-                
-                    --exclude "config.js" \
-                
-                    --region $AWS_DEFAULT_REGION \
-                
-                    --cache-control "public, max-age=60"
-                 
-                  aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js \
-                
-                    --region $AWS_DEFAULT_REGION \
-                
-                    --cache-control "no-store, must-revalidate" \
-                
-                    --content-type "application/javascript"
-                
-                '''
+
+                aws s3 sync $BUILD_DIR/_next/ s3://$S3_BUCKET/_next/ --region $AWS_DEFAULT_REGION --cache-control "public, max-age=31536000, immutable"
+               
+                aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ --delete --exclude "_next/*" --exclude "config.js" --region $AWS_DEFAULT_REGION --cache-control "public, max-age=60"
+               
+                aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js --region $AWS_DEFAULT_REGION --cache-control "no-store, must-revalidate" --content-type "application/javascript"
+              
+              '''
+
+ 
             echo "✅ S3 deployment complete — all files uploaded"
           }
         }
