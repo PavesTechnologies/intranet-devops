@@ -261,41 +261,18 @@ ${entries}
             echo "📤 Uploading ${config.buildDir}/ to S3 bucket: ${config.s3Bucket}"
 
             sh '''
-
-              # _next/static/ — hashed filenames, safe to cache 1 year
-
-              aws s3 sync $BUILD_DIR/_next/ s3://$S3_BUCKET/_next/ \
-
-                --region ap-south-1 \
-
-                --cache-control "public, max-age=31536000, immutable"
- 
-              # HTML pages and other assets — short cache so deploys take effect quickly
-
+              # Main sync — uploads all files with general cache policy
               aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ \
-
                 --delete \
-
-                --exclude "_next/*" \
-
-                --exclude "config.js" \
-
-                --region ap-south-1 \
-
-                --cache-control "public, max-age=60"
- 
-              # config.js — never cache (runtime env values)
-
+                --region $AWS_DEFAULT_REGION \
+                --cache-control "public, max-age=3600"
+              
+              # Explicitly set config.js to no-cache/no-store
               aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js \
-
-                --region ap-south-1 \
-
+                --region $AWS_DEFAULT_REGION \
                 --cache-control "no-store, must-revalidate" \
-
                 --metadata "deployment-time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-
                 --content-type "application/javascript"
-
             '''
             echo "✅ S3 deployment complete — all files uploaded"
           }
