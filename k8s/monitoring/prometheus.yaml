@@ -2,7 +2,6 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: monitoring
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,7 +21,6 @@ data:
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
           - role: pod
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -35,7 +33,6 @@ spec:
   resources:
     requests:
       storage: 10Gi
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -82,7 +79,6 @@ spec:
       - name: storage
         persistentVolumeClaim:
           claimName: prometheus-storage
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -95,13 +91,11 @@ spec:
   - port: 9090
     targetPort: 9090
   type: ClusterIP
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus
   namespace: monitoring
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -115,7 +109,6 @@ rules:
   - endpoints
   - pods
   verbs: ["get", "list", "watch"]
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
