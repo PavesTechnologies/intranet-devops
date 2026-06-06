@@ -89,8 +89,6 @@ spec:
     metadata:
       labels:
         app: kube-state-metrics
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
     spec:
       serviceAccountName: kube-state-metrics
       containers:
@@ -115,8 +113,6 @@ kind: Service
 metadata:
   name: kube-state-metrics
   namespace: monitoring
-  labels:
-    app: kube-state-metrics
 spec:
   selector:
     app: kube-state-metrics

@@ -40,8 +40,6 @@ spec:
     metadata:
       labels:
         app: node-exporter
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9100"
     spec:
       serviceAccountName: node-exporter
       hostNetwork: true
@@ -90,8 +88,6 @@ kind: Service
 metadata:
   name: node-exporter
   namespace: monitoring
-  labels:
-    app: node-exporter
 spec:
   selector:
     app: node-exporter
