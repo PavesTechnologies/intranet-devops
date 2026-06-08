@@ -16,6 +16,8 @@ data:
     rbac:
       roles:
         - name: ADMIN
+          clusters:
+            - paves-intranet-cdc
           subjects:
             - provider: LOGIN_FORM
               type: user
@@ -71,6 +73,8 @@ data:
                 - VIEW
 
         - name: DEVOPS
+          clusters:
+            - paves-intranet-cdc
           subjects:
             - provider: LOGIN_FORM
               type: user
@@ -102,6 +106,8 @@ data:
                 - VIEW
 
         - name: READONLY
+          clusters:
+            - paves-intranet-cdc
           subjects:
             - provider: LOGIN_FORM
               type: user
@@ -127,7 +133,8 @@ data:
             - resource: SCHEMA
               value: ".*"
               actions:
-                - VIEW              
+                - VIEW
+              
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
