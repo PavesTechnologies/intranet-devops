@@ -22,21 +22,53 @@ data:
               value: "Paves_admin"
           permissions:
             - resource: APPLICATIONCONFIG
-              actions: ["VIEW", "EDIT"]
+              value: ".*"
+              actions:
+                - VIEW
+                - EDIT
             - resource: CLUSTERCONFIG
-              actions: ["VIEW", "EDIT"]
+              value: ".*"
+              actions:
+                - VIEW
+                - EDIT
             - resource: TOPIC
-              actions: ["VIEW", "CREATE", "DELETE", "EDIT", "MESSAGES_READ", "MESSAGES_PRODUCE"]
+              value: ".*"
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
+                - MESSAGES_READ
+                - MESSAGES_PRODUCE
             - resource: CONSUMER
-              actions: ["VIEW", "DELETE", "RESET_OFFSETS"]
+              value: ".*"
+              actions:
+                - VIEW
+                - DELETE
+                - RESET_OFFSETS
             - resource: BROKER
-              actions: ["VIEW", "EDIT"]
+              value: ".*"
+              actions:
+                - VIEW
+                - EDIT
             - resource: CONNECTOR
-              actions: ["VIEW", "CREATE", "DELETE", "EDIT"]
+              value: ".*"
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
             - resource: SCHEMA
-              actions: ["VIEW", "CREATE", "DELETE", "EDIT"]
+              value: ".*"
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
             - resource: AUDIT
-              actions: ["VIEW"]
+              value: ".*"
+              actions:
+                - VIEW
 
         - name: DEVOPS
           subjects:
@@ -45,15 +77,29 @@ data:
               value: "Paves_devops"
           permissions:
             - resource: TOPIC
-              actions: ["VIEW", "MESSAGES_READ"]
+              value: ".*"
+              actions:
+                - VIEW
+                - MESSAGES_READ
             - resource: CONSUMER
-              actions: ["VIEW", "RESET_OFFSETS"]
+              value: ".*"
+              actions:
+                - VIEW
+                - RESET_OFFSETS
             - resource: CONNECTOR
-              actions: ["VIEW", "CREATE", "EDIT"]
+              value: ".*"
+              actions:
+                - VIEW
+                - CREATE
+                - EDIT
             - resource: BROKER
-              actions: ["VIEW"]
+              value: ".*"
+              actions:
+                - VIEW
             - resource: SCHEMA
-              actions: ["VIEW"]
+              value: ".*"
+              actions:
+                - VIEW
 
         - name: READONLY
           subjects:
@@ -62,16 +108,26 @@ data:
               value: "Paves_readonly"
           permissions:
             - resource: TOPIC
-              actions: ["VIEW", "MESSAGES_READ"]
+              value: ".*"
+              actions:
+                - VIEW
+                - MESSAGES_READ
             - resource: CONSUMER
-              actions: ["VIEW"]
+              value: ".*"
+              actions:
+                - VIEW
             - resource: CONNECTOR
-              actions: ["VIEW"]
+              value: ".*"
+              actions:
+                - VIEW
             - resource: BROKER
-              actions: ["VIEW"]
+              value: ".*"
+              actions:
+                - VIEW
             - resource: SCHEMA
-              actions: ["VIEW"]
-
+              value: ".*"
+              actions:
+                - VIEW              
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
