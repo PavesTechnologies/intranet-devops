@@ -10,50 +10,6 @@ data:
         - name: paves-intranet-cdc
           bootstrapServers: kafka-service.infra.svc.cluster.local:9092
 
-    auth:
-      type: LOGIN_FORM
-
-    rbac:
-      roles:
-        - name: ADMIN
-          clusters:
-            - name: paves-intranet-cdc
-              permissions:
-                - resource: TOPIC
-                  actions: [VIEW, CREATE, DELETE, EDIT, MESSAGES_READ, MESSAGES_PRODUCE]
-                - resource: CONSUMER
-                  actions: [VIEW, DELETE, RESET_OFFSETS]
-                - resource: BROKER
-                  actions: [VIEW, EDIT]
-                - resource: CONNECTOR
-                  actions: [VIEW, CREATE, DELETE, EDIT]
-
-        - name: DEVOPS
-          clusters:
-            - name: paves-intranet-cdc
-              permissions:
-                - resource: TOPIC
-                  actions: [VIEW, MESSAGES_READ]
-                - resource: CONSUMER
-                  actions: [VIEW, RESET_OFFSETS]
-                - resource: CONNECTOR
-                  actions: [VIEW, CREATE, EDIT]
-                - resource: BROKER
-                  actions: [VIEW]
-
-        - name: READONLY
-          clusters:
-            - name: paves-intranet-cdc
-              permissions:
-                - resource: TOPIC
-                  actions: [VIEW, MESSAGES_READ]
-                - resource: CONSUMER
-                  actions: [VIEW]
-                - resource: CONNECTOR
-                  actions: [VIEW]
-                - resource: BROKER
-                  actions: [VIEW]
-
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -120,7 +76,7 @@ spec:
       containers:
         - name: kafka-ui
           image: provectuslabs/kafka-ui:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           volumeMounts:
@@ -130,11 +86,6 @@ spec:
           env:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: /etc/kafka-ui/config.yml
-
-            - name: KAFKA_CLUSTERS_0_NAME
-              value: "paves-intranet-cdc"
-            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-              value: "kafka-service.infra.svc.cluster.local:9092"
 
             - name: KAFKA_UI_AUTH_USERS_0_USERNAME
               valueFrom:
@@ -187,14 +138,16 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
+            failureThreshold: 10
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 90
             periodSeconds: 20
+            failureThreshold: 5
 
 ---
 apiVersion: v1
