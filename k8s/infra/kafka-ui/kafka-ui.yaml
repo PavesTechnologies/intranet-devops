@@ -10,6 +10,107 @@ data:
         - name: paves-intranet-cdc
           bootstrapServers: kafka-service.infra.svc.cluster.local:9092
 
+    auth:
+      type: LOGIN_FORM
+
+    rbac:
+      roles:
+        - name: ADMIN
+          subjects:
+            - provider: LOGIN_FORM
+              type: user
+              value: "Paves_admin"
+          permissions:
+            - resource: APPLICATIONCONFIG
+              actions:
+                - VIEW
+                - EDIT
+            - resource: CLUSTERCONFIG
+              actions:
+                - VIEW
+                - EDIT
+            - resource: TOPIC
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
+                - MESSAGES_READ
+                - MESSAGES_PRODUCE
+            - resource: CONSUMER
+              actions:
+                - VIEW
+                - DELETE
+                - RESET_OFFSETS
+            - resource: BROKER
+              actions:
+                - VIEW
+                - EDIT
+            - resource: CONNECTOR
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
+            - resource: SCHEMA
+              actions:
+                - VIEW
+                - CREATE
+                - DELETE
+                - EDIT
+            - resource: AUDIT
+              actions:
+                - VIEW
+
+        - name: DEVOPS
+          subjects:
+            - provider: LOGIN_FORM
+              type: user
+              value: "Paves_devops"
+          permissions:
+            - resource: TOPIC
+              actions:
+                - VIEW
+                - MESSAGES_READ
+            - resource: CONSUMER
+              actions:
+                - VIEW
+                - RESET_OFFSETS
+            - resource: CONNECTOR
+              actions:
+                - VIEW
+                - CREATE
+                - EDIT
+            - resource: BROKER
+              actions:
+                - VIEW
+            - resource: SCHEMA
+              actions:
+                - VIEW
+
+        - name: READONLY
+          subjects:
+            - provider: LOGIN_FORM
+              type: user
+              value: "Paves_readonly"
+          permissions:
+            - resource: TOPIC
+              actions:
+                - VIEW
+                - MESSAGES_READ
+            - resource: CONSUMER
+              actions:
+                - VIEW
+            - resource: CONNECTOR
+              actions:
+                - VIEW
+            - resource: BROKER
+              actions:
+                - VIEW
+            - resource: SCHEMA
+              actions:
+                - VIEW
+
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
