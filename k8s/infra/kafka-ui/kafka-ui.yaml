@@ -22,45 +22,21 @@ data:
               value: "Paves_admin"
           permissions:
             - resource: APPLICATIONCONFIG
-              actions:
-                - VIEW
-                - EDIT
+              actions: ["VIEW", "EDIT"]
             - resource: CLUSTERCONFIG
-              actions:
-                - VIEW
-                - EDIT
+              actions: ["VIEW", "EDIT"]
             - resource: TOPIC
-              actions:
-                - VIEW
-                - CREATE
-                - DELETE
-                - EDIT
-                - MESSAGES_READ
-                - MESSAGES_PRODUCE
+              actions: ["VIEW", "CREATE", "DELETE", "EDIT", "MESSAGES_READ", "MESSAGES_PRODUCE"]
             - resource: CONSUMER
-              actions:
-                - VIEW
-                - DELETE
-                - RESET_OFFSETS
+              actions: ["VIEW", "DELETE", "RESET_OFFSETS"]
             - resource: BROKER
-              actions:
-                - VIEW
-                - EDIT
+              actions: ["VIEW", "EDIT"]
             - resource: CONNECTOR
-              actions:
-                - VIEW
-                - CREATE
-                - DELETE
-                - EDIT
+              actions: ["VIEW", "CREATE", "DELETE", "EDIT"]
             - resource: SCHEMA
-              actions:
-                - VIEW
-                - CREATE
-                - DELETE
-                - EDIT
+              actions: ["VIEW", "CREATE", "DELETE", "EDIT"]
             - resource: AUDIT
-              actions:
-                - VIEW
+              actions: ["VIEW"]
 
         - name: DEVOPS
           subjects:
@@ -69,24 +45,15 @@ data:
               value: "Paves_devops"
           permissions:
             - resource: TOPIC
-              actions:
-                - VIEW
-                - MESSAGES_READ
+              actions: ["VIEW", "MESSAGES_READ"]
             - resource: CONSUMER
-              actions:
-                - VIEW
-                - RESET_OFFSETS
+              actions: ["VIEW", "RESET_OFFSETS"]
             - resource: CONNECTOR
-              actions:
-                - VIEW
-                - CREATE
-                - EDIT
+              actions: ["VIEW", "CREATE", "EDIT"]
             - resource: BROKER
-              actions:
-                - VIEW
+              actions: ["VIEW"]
             - resource: SCHEMA
-              actions:
-                - VIEW
+              actions: ["VIEW"]
 
         - name: READONLY
           subjects:
@@ -95,21 +62,15 @@ data:
               value: "Paves_readonly"
           permissions:
             - resource: TOPIC
-              actions:
-                - VIEW
-                - MESSAGES_READ
+              actions: ["VIEW", "MESSAGES_READ"]
             - resource: CONSUMER
-              actions:
-                - VIEW
+              actions: ["VIEW"]
             - resource: CONNECTOR
-              actions:
-                - VIEW
+              actions: ["VIEW"]
             - resource: BROKER
-              actions:
-                - VIEW
+              actions: ["VIEW"]
             - resource: SCHEMA
-              actions:
-                - VIEW
+              actions: ["VIEW"]
 
 ---
 apiVersion: external-secrets.io/v1
@@ -188,6 +149,7 @@ spec:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: /etc/kafka-ui/config.yml
 
+            # Admin User Configuration
             - name: KAFKA_UI_AUTH_USERS_0_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -201,6 +163,7 @@ spec:
             - name: KAFKA_UI_AUTH_USERS_0_ROLES_0
               value: "ADMIN"
 
+            # DevOps User Configuration
             - name: KAFKA_UI_AUTH_USERS_1_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -214,6 +177,7 @@ spec:
             - name: KAFKA_UI_AUTH_USERS_1_ROLES_0
               value: "DEVOPS"
 
+            # Read-Only User Configuration
             - name: KAFKA_UI_AUTH_USERS_2_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -235,20 +199,21 @@ spec:
               cpu: "500m"
               memory: "512Mi"
 
+          # Adjusted probes to give Spring Boot plenty of time to initialize without triggering premature kills
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 30
             periodSeconds: 10
-            failureThreshold: 10
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 90
-            periodSeconds: 20
-            failureThreshold: 5
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 3
 
 ---
 apiVersion: v1
