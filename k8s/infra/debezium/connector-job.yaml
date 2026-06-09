@@ -1,0 +1,89 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: register-eos-connector
+  namespace: infra
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: register-connector
+          image: curlimages/curl:latest
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: debezium-rds-secret
+                  key: db_host
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: debezium-rds-secret
+                  key: db_user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: debezium-rds-secret
+                  key: db_password
+          command:
+            - sh
+            - -c
+            - |
+              DEBEZIUM_URL="http://debezium-service.infra.svc.cluster.local:8083"
+
+              echo "Waiting for Debezium to be ready..."
+              until curl -s "$DEBEZIUM_URL/connectors" > /dev/null; do
+                echo "Debezium not ready — waiting 10s..."
+                sleep 10
+              done
+              echo "Debezium is ready."
+
+              # check if connector already registered — idempotent
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                "$DEBEZIUM_URL/connectors/eos-employee-connector")
+
+              if [ "$STATUS" = "200" ]; then
+                echo "Connector already registered. Skipping."
+                exit 0
+              fi
+
+              echo "Registering connector..."
+              curl -X POST "$DEBEZIUM_URL/connectors" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"name\": \"eos-employee-connector\",
+                  \"config\": {
+                    \"connector.class\": \"io.debezium.connector.mysql.MySqlConnector\",
+                    \"database.hostname\": \"$DB_HOST\",
+                    \"database.port\": \"3306\",
+                    \"database.user\": \"$DB_USER\",
+                    \"database.password\": \"$DB_PASSWORD\",
+                    \"database.ssl.mode\": \"preferred\",
+                    \"database.server.id\": \"184060\",
+                    \"topic.prefix\": \"eos_test\",
+                    \"database.include.list\": \"eos\",
+                    \"table.include.list\": \"eos.employee_details\",
+                    \"schema.history.internal.kafka.bootstrap.servers\": \"kafka-service.infra.svc.cluster.local:9092\",
+                    \"schema.history.internal.kafka.topic\": \"schema-history.eos\",
+                    \"key.converter\": \"org.apache.kafka.connect.json.JsonConverter\",
+                    \"key.converter.schemas.enable\": \"false\",
+                    \"value.converter\": \"org.apache.kafka.connect.json.JsonConverter\",
+                    \"value.converter.schemas.enable\": \"false\",
+                    \"transforms\": \"unwrap\",
+                    \"transforms.unwrap.type\": \"io.debezium.transforms.ExtractNewRecordState\",
+                    \"transforms.unwrap.add.fields\": \"op,ts_ms\",
+                    \"transforms.unwrap.delete.handling.mode\": \"rewrite\",
+                    \"transforms.unwrap.drop.tombstones\": \"false\",
+                    \"snapshot.mode\": \"initial\"
+                  }
+                }"
+
+              echo "Verifying connector status..."
+              sleep 10
+              curl -s "$DEBEZIUM_URL/connectors/eos-employee-connector/status"
+              echo "Done."

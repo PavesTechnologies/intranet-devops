@@ -1,3 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-ui-config
+  namespace: infra
+data:
+  config.yml: |
+    kafka:
+      clusters:
+        - name: paves-intranet-cdc
+          bootstrapServers: kafka-service.infra.svc.cluster.local:9092
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: kafka-ui-credentials
+  namespace: infra
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secret-store
+    kind: ClusterSecretStore
+  target:
+    name: kafka-ui-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: admin_username
+      remoteRef:
+        key: paves/kafka-ui/users
+        property: admin_username
+    - secretKey: admin_password
+      remoteRef:
+        key: paves/kafka-ui/users
+        property: admin_password
+    - secretKey: devops_username
+      remoteRef:
+        key: paves/kafka-ui/users
+        property: devops_username
+    - secretKey: devops_password
+      remoteRef:
+        key: paves/kafka-ui/users
+        property: devops_password
+    - secretKey: readonly_username
+      remoteRef:
+        key: paves/kafka-ui/users
+        property: readonly_username
+    - secretKey: readonly_password
+      remoteRef:
+        key: paves/kafka-ui/users
+        property: readonly_password
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,17 +69,66 @@ spec:
       labels:
         app: kafka-ui
     spec:
+      volumes:
+        - name: kafka-ui-config
+          configMap:
+            name: kafka-ui-config
       containers:
         - name: kafka-ui
           image: provectuslabs/kafka-ui:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          volumeMounts:
+            - name: kafka-ui-config
+              mountPath: /etc/kafka-ui
+              readOnly: true
           env:
-            - name: KAFKA_CLUSTERS_0_NAME
-              value: "paves-intranet-cdc"
-            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-              value: "kafka-service.infra.svc.cluster.local:9092"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: /etc/kafka-ui/config.yml
+
+            # Admin User Configuration
+            - name: KAFKA_UI_AUTH_USERS_0_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: admin_username
+            - name: KAFKA_UI_AUTH_USERS_0_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: admin_password
+            - name: KAFKA_UI_AUTH_USERS_0_ROLES_0
+              value: "ADMIN"
+
+            # DevOps User Configuration
+            - name: KAFKA_UI_AUTH_USERS_1_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: devops_username
+            - name: KAFKA_UI_AUTH_USERS_1_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: devops_password
+            - name: KAFKA_UI_AUTH_USERS_1_ROLES_0
+              value: "DEVOPS"
+
+            # Read-Only User Configuration
+            - name: KAFKA_UI_AUTH_USERS_2_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: readonly_username
+            - name: KAFKA_UI_AUTH_USERS_2_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: readonly_password
+            - name: KAFKA_UI_AUTH_USERS_2_ROLES_0
+              value: "READONLY"
+
           resources:
             requests:
               cpu: "100m"
@@ -34,6 +136,23 @@ spec:
             limits:
               cpu: "500m"
               memory: "512Mi"
+
+          # Adjusted probes to give Spring Boot plenty of time to initialize without triggering premature kills
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 3
+
 ---
 apiVersion: v1
 kind: Service

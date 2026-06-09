@@ -1,24 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: paves-rms
+  name: paves-monitoring
   namespace: argocd
-  labels:
-    team: paves
 spec:
   project: default
   source:
     repoURL: https://github.com/PavesTechnologies/intranet-devops
     targetRevision: main
-    path: k8s/backend/rms
-    directory:
-      recurse: true
+    path: k8s/monitoring
   destination:
     server: https://kubernetes.default.svc
-    namespace: backend
+    namespace: monitoring
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
+    - CreateNamespace=true

@@ -28,8 +28,8 @@ spec:
                 echo "Kafka not ready — waiting 5s..."
                 sleep 5
               done
-              echo "Kafka ready."
-      containers:
+              echo "Kafka is ready."
+      containers: 
         - name: debezium
           image: debezium/connect:3.0.0.Final
           imagePullPolicy: IfNotPresent
@@ -60,6 +60,24 @@ spec:
               value: "false"
             - name: VALUE_CONVERTER_SCHEMAS_ENABLE
               value: "false"
+
+          # RDS credentials from AWS Secrets Manager
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: debezium-rds-secret
+                  key: db_host
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: debezium-rds-secret
+                  key: db_user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: debezium-rds-secret
+                  key: db_password
+
           resources:
             requests:
               cpu: "250m"
