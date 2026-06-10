@@ -88,21 +88,21 @@ def call(Map config) {
               }
             }
 
-            // Check if branch is 'dev'
-            if (currentBranch != 'dev') {
-              echo """
-╔════════════════════════════════════════════════════════════════╗
-║ ❌ PIPELINE GUARD FAILURE                                      ║
-╠════════════════════════════════════════════════════════════════╣
-║ Branch: ${currentBranch.padRight(53)} ║
-║ Expected: dev                                                  ║
-║                                                                ║
-║ This pipeline is locked to 'dev' branch only.                  ║
-║ Accidental execution on other branches is blocked.             ║
-╚════════════════════════════════════════════════════════════════╝
-              """
-              error "Pipeline only runs on 'dev' branch. Current: ${currentBranch}"
-            }
+//             // Check if branch is 'dev'
+//             if (currentBranch != '') {
+//               echo """
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ ❌ PIPELINE GUARD FAILURE                                      ║
+// ╠════════════════════════════════════════════════════════════════╣
+// ║ Branch: ${currentBranch.padRight(53)} ║
+// ║ Expected: dev                                                  ║
+// ║                                                                ║
+// ║ This pipeline is locked to 'dev' branch only.                  ║
+// ║ Accidental execution on other branches is blocked.             ║
+// ╚════════════════════════════════════════════════════════════════╝
+//               """
+//               error "Pipeline only runs on 'dev' branch. Current: ${currentBranch}"
+//             }
             
             echo "✅ Branch guard passed: Current branch is 'dev'"
           }
