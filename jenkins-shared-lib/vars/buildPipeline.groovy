@@ -47,16 +47,6 @@ def call(Map config) {
             success {
                 script {
                     echo "CI passed"
-                    if (webhookUrl?.trim()) {
-                        notifyTeams([
-                            status:      'SUCCESS',
-                            serviceName: serviceName,
-                            branch:      env.GIT_BRANCH ?: 'unknown',
-                            triggeredBy: env.TRIGGERED_BY ?: 'unknown',
-                            imageTag:    "PR-CI #${env.BUILD_NUMBER}",
-                            webhookUrl:  webhookUrl
-                        ])
-                    }
                     setGitHubPullRequestStatus(
                         context: 'ci/jenkins',
                         message: 'All quality gates passed',
@@ -67,16 +57,6 @@ def call(Map config) {
             failure {
                 script {
                     echo "CI failed"
-                    if (webhookUrl?.trim()) {
-                        notifyTeams([
-                            status:      'FAILURE',
-                            serviceName: serviceName,
-                            branch:      env.GIT_BRANCH ?: 'unknown',
-                            triggeredBy: env.TRIGGERED_BY ?: 'unknown',
-                            imageTag:    "PR-CI #${env.BUILD_NUMBER}",
-                            webhookUrl:  webhookUrl
-                        ])
-                    }
                     setGitHubPullRequestStatus(
                         context: 'ci/jenkins',
                         message: 'CI failed — check build logs',
