@@ -31,7 +31,7 @@ def call(Map config) {
                     //         always { junit 'target/surefire-reports/*.xml' }
                     //     }
                     // }
-            
+
                     // stage('SonarQube') {
                     //     steps { sonarScan(config.sonarProjectKey) }
                     // }
@@ -47,8 +47,19 @@ def call(Map config) {
             success {
                 script {
                     echo "CI passed"
+                    def statusContext = config.prStatusContext ?: env.JOB_BASE_NAME ?: env.JOB_NAME
+                    // if (webhookUrl?.trim()) {
+                    //     notifyTeams([
+                    //         status:      'SUCCESS',
+                    //         serviceName: serviceName,
+                    //         branch:      env.GIT_BRANCH ?: 'unknown',
+                    //         triggeredBy: env.TRIGGERED_BY ?: 'unknown',
+                    //         imageTag:    "PR-CI #${env.BUILD_NUMBER}",
+                    //         webhookUrl:  webhookUrl
+                    //     ])
+                    // }
                     setGitHubPullRequestStatus(
-                        context: 'ci/jenkins',
+                        context: statusContext,
                         message: 'All quality gates passed',
                         state:   'SUCCESS'
                     )
@@ -57,8 +68,19 @@ def call(Map config) {
             failure {
                 script {
                     echo "CI failed"
+                    def statusContext = config.prStatusContext ?: env.JOB_BASE_NAME ?: env.JOB_NAME
+                    // if (webhookUrl?.trim()) {
+                    //     notifyTeams([
+                    //         status:      'FAILURE',
+                    //         serviceName: serviceName,
+                    //         branch:      env.GIT_BRANCH ?: 'unknown',
+                    //         triggeredBy: env.TRIGGERED_BY ?: 'unknown',
+                    //         imageTag:    "PR-CI #${env.BUILD_NUMBER}",
+                    //         webhookUrl:  webhookUrl
+                    //     ])
+                    // }
                     setGitHubPullRequestStatus(
-                        context: 'ci/jenkins',
+                        context: statusContext,
                         message: 'CI failed — check build logs',
                         state:   'FAILURE'
                     )
@@ -67,8 +89,9 @@ def call(Map config) {
             aborted {
                 script {
                     echo "CI aborted"
+                    def statusContext = config.prStatusContext ?: env.JOB_BASE_NAME ?: env.JOB_NAME
                     setGitHubPullRequestStatus(
-                        context: 'ci/jenkins',
+                        context: statusContext,
                         message: 'CI aborted',
                         state:   'ERROR'
                     )
