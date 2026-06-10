@@ -43,5 +43,60 @@ def call(Map config) {
             //     }
             // }
         } // End stages
+        post {
+            success {
+                script {
+                    echo "CI passed"
+                    if (webhookUrl?.trim()) {
+                        notifyTeams([
+                            status:      'SUCCESS',
+                            serviceName: serviceName,
+                            branch:      env.GIT_BRANCH ?: 'unknown',
+                            triggeredBy: env.TRIGGERED_BY ?: 'unknown',
+                            imageTag:    "PR-CI #${env.BUILD_NUMBER}",
+                            webhookUrl:  webhookUrl
+                        ])
+                    }
+                    setGitHubPullRequestStatus(
+                        context: 'ci/jenkins',
+                        message: 'All quality gates passed',
+                        state:   'SUCCESS'
+                    )
+                }
+            }
+            failure {
+                script {
+                    echo "CI failed"
+                    if (webhookUrl?.trim()) {
+                        notifyTeams([
+                            status:      'FAILURE',
+                            serviceName: serviceName,
+                            branch:      env.GIT_BRANCH ?: 'unknown',
+                            triggeredBy: env.TRIGGERED_BY ?: 'unknown',
+                            imageTag:    "PR-CI #${env.BUILD_NUMBER}",
+                            webhookUrl:  webhookUrl
+                        ])
+                    }
+                    setGitHubPullRequestStatus(
+                        context: 'ci/jenkins',
+                        message: 'CI failed — check build logs',
+                        state:   'FAILURE'
+                    )
+                }
+            }
+            aborted {
+                script {
+                    echo "CI aborted"
+                    setGitHubPullRequestStatus(
+                        context: 'ci/jenkins',
+                        message: 'CI aborted',
+                        state:   'ERROR'
+                    )
+                }
+            }
+            always {
+                cleanWs()
+            }
+        }
     } // End pipeline
 } // End call
