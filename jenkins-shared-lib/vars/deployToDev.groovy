@@ -1,5 +1,12 @@
 def call(Map config) {
 
+  // Block CD from running on PR builds — CHANGE_ID is set by Jenkins for any PR trigger
+  if (env.CHANGE_ID) {
+    echo "CD skipped: PR #${env.CHANGE_ID} → '${env.CHANGE_TARGET}'. CD only runs on direct pushes to the branch."
+    currentBuild.result = 'ABORTED'
+    return
+  }
+
   def serviceName  = config.serviceName
   def serviceType  = config.serviceType  ?: 'java'
   def ecrRepo      = config.ecrRepo
