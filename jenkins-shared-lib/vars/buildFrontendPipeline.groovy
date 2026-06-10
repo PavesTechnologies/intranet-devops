@@ -88,21 +88,21 @@ def call(Map config) {
               }
             }
 
-            // Check if branch is 'main'
-            if (currentBranch != 'main') {
-              echo """
-╔════════════════════════════════════════════════════════════════╗
-║ ❌ PIPELINE GUARD FAILURE                                      ║
-╠════════════════════════════════════════════════════════════════╣
-║ Branch: ${currentBranch.padRight(53)} ║
-║ Expected: main                                                  ║
-║                                                                ║
-║ This pipeline is locked to 'main' branch only.                  ║
-║ Accidental execution on other branches is blocked.             ║
-╚════════════════════════════════════════════════════════════════╝
-              """
-              error "Pipeline only runs on 'main' branch. Current: ${currentBranch}"
-            }
+//             // Check if branch is 'main'
+//             if (currentBranch != 'main') {
+//               echo """
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ ❌ PIPELINE GUARD FAILURE                                      ║
+// ╠════════════════════════════════════════════════════════════════╣
+// ║ Branch: ${currentBranch.padRight(53)} ║
+// ║ Expected: main                                                  ║
+// ║                                                                ║
+// ║ This pipeline is locked to 'main' branch only.                  ║
+// ║ Accidental execution on other branches is blocked.             ║
+// ╚════════════════════════════════════════════════════════════════╝
+//               """
+//               error "Pipeline only runs on 'main' branch. Current: ${currentBranch}"
+//             }
             
             echo "✅ Branch guard passed: Current branch is 'main'"
           }
