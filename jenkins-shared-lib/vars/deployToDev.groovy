@@ -7,15 +7,6 @@ def call(Map config) {
     return
   }
 
-  // Block CD if triggered from the wrong branch
-  def expectedBranch = config.branch ?: 'dev'
-  def currentBranch  = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '').trim()
-  if (currentBranch && currentBranch != expectedBranch) {
-    echo "CD skipped: running on '${currentBranch}', expected '${expectedBranch}'."
-    currentBuild.result = 'ABORTED'
-    return
-  }
-
   def serviceName  = config.serviceName
   def serviceType  = config.serviceType  ?: 'java'
   def ecrRepo      = config.ecrRepo
@@ -48,6 +39,20 @@ def call(Map config) {
               fi
               echo "${dockerfile} found"
             """
+          }
+        }
+      }
+
+      stage('Validate Branch') {
+        steps {
+          script {
+            // GIT_BRANCH is set by the Git plugin after checkout — reliable here
+            def currentBranch = (env.GIT_BRANCH ?: '').replace('origin/', '').trim()
+            if (currentBranch != branch) {
+              currentBuild.result = 'ABORTED'
+              error("CD skipped: triggered on '${currentBranch}', expected '${branch}'. Only pushes to '${branch}' should deploy.")
+            }
+            echo "Branch validated: '${currentBranch}' matches expected '${branch}'"
           }
         }
       }
