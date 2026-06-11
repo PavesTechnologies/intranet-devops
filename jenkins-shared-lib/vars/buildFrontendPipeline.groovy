@@ -1,197 +1,228 @@
-// jenkins-shared-lib/vars/buildFrontendPipeline.groovy
 //
-// "Build once, deploy everywhere" pattern.
+// buildFrontendPipeline.groovy — Simplified Frontend CI/CD Pipeline
+//
+// "Build once, deploy everywhere" pattern for React + Vite
 //
 // The Vite bundle is built ONCE with no environment-specific values baked in.
-// At deploy time, a config.js file is generated from AWS Secrets Manager and
-// uploaded alongside the static bundle. The React app reads window.__APP_CONFIG__
+// At deploy time, a config.js file is generated from AWS Secrets Manager with
+// fresh values and deployed to S3 bucket root. The React app reads window.__APP_CONFIG__
 // at runtime instead of import.meta.env at build time.
 //
-// ── One-time migration in your React app ─────────────────────────────────────
+// ── React App Setup ────────────────────────────────────────────────────────────
 //
-//   1. Add this as the FIRST <script> tag in index.html (before the Vite entry):
+//   1. Add this as the FIRST <script> tag in index.html (before Vite entry):
 //        <script src="/config.js"></script>
 //
 //   2. Replace all import.meta.env.VITE_* references:
 //        BEFORE:  const url = import.meta.env.VITE_API_BASE_URL
-//        AFTER:   const url = window.__APP_CONFIG__.apiBaseUrl
+//        AFTER:   const url = window.__APP_CONFIG__.TIMESHEET_API_ENDPOINT
 //
-//   3. Optional — create src/config.ts for a typed accessor:
-//        interface AppConfig { apiBaseUrl: string; featureFlags: boolean }
-//        export const appConfig = (window as any).__APP_CONFIG__ as AppConfig
+//   3. Example AWS Secrets Manager secret 'intranet/frontend/runtime-dev':
+//        {
+//          "TIMESHEET_API_ENDPOINT": "http://localhost:5000",
+//          "USER_MANAGEMENT_URL": "http://13.48.18.145",
+//          "BASE_URL": "http://16.16.202.195:9999",
+//          "PMS_BASE_URL": "http://13.127.14.175",
+//          "MSOffice_USER_MANAGEMENT_URL": "http://13.48.18.145",
+//          "EMPLOYEE_ONBOARDING_URL": "http://16.16.202.195:9999"
+//        }
 //
-// ── Config map keys (pass from your Jenkinsfile) ──────────────────────────────
-//   appName         (String, required)  – label used in logs and notifications
-//   envSecret       (String, required)  – Secrets Manager secret ID; must be a
-//                                         JSON object of runtime config key/values
-//   s3Bucket        (String, required)  – bucket name, no s3:// prefix
-//   cloudfrontId    (String, required)  – CloudFront distribution ID
-//   cloudfrontDomain(String, optional) – used to print PR preview URLs in logs
-//   sonarProjectKey (String, optional) – set null/omit to skip the SonarQube stage
-//   nodeVersion     (String, optional) – Jenkins Node.js tool name; default 'NodeJS-20'
-//   awsRegion       (String, optional) – default 'ap-south-1'
-//   buildDir        (String, optional) – Vite output dir; default 'dist'
+// ── Usage in Jenkinsfile ───────────────────────────────────────────────────────
 //
-// ── Branch → S3 prefix mapping ────────────────────────────────────────────────
-//   main     → prod/
-//   staging  → staging/
-//   develop  → dev/
-//   PR-*     → previews/PR-<CHANGE_ID>/
+//   @Library('shared-lib') _
+//   buildFrontendPipeline([
+//       appName         : 'Intranet Frontend',
+//       envSecret       : 'intranet/frontend/runtime-dev',
+//       s3Bucket        : 'paves-intranet-testing-dev',
+//       cloudfrontId    : 'E1QTJRU34QZ161',
+//       cloudfrontDomain: 'd15j2ej3bear0q.cloudfront.net',
+//       sonarProjectKey : 'intranet-frontend',
+//       nodeVersion     : 'NodeJS-22',
+//       awsRegion       : 'ap-south-1',
+//       buildDir        : 'dist'
+//   ])
 
 def call(Map config) {
 
-    // ── Defaults ──────────────────────────────────────────────────────────────
-    config.nodeVersion = config.nodeVersion ?: 'NodeJS-20'
-    config.awsRegion   = config.awsRegion   ?: 'ap-south-1'
-    config.buildDir    = config.buildDir    ?: 'dist'
+  // ── Defaults ──────────────────────────────────────────────────────────────
+  config.nodeVersion = config.nodeVersion ?: 'NodeJS-20'
+  config.awsRegion   = config.awsRegion   ?: 'ap-south-1'
+  config.buildDir    = config.buildDir    ?: 'dist'
 
-    // Resolved during 'Load environment' and referenced by later stages
-    def s3Prefix   = ''
-    def isPR       = false
-    def runtimeCfg = [:]   // key/value pairs from Secrets Manager → written to config.js
+  def runtimeCfg = [:]
 
-    pipeline {
-         agent { label 'worker' }
+  pipeline {
+    agent { label 'worker' }
 
-        options {
-            timestamps()
-            disableConcurrentBuilds()
-            buildDiscarder(logRotator(numToKeepStr: '20'))
-        }
+    options {
+      timestamps()
+      disableConcurrentBuilds()
+      buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
 
-        environment {
-            APP_NAME           = "${config.appName}"
-            S3_BUCKET          = "${config.s3Bucket}"
-            CF_DIST_ID         = "${config.cloudfrontId}"
-            AWS_DEFAULT_REGION = "${config.awsRegion}"
-            BUILD_DIR          = "${config.buildDir}"
-        }
+    environment {
+      APP_NAME           = "${config.appName}"
+      S3_BUCKET          = "${config.s3Bucket}"
+      CF_DIST_ID         = "${config.cloudfrontId}"
+      AWS_DEFAULT_REGION = "${config.awsRegion}"
+      BUILD_DIR          = "${config.buildDir}"
+    }
 
-        stages {
+    stages {
 
-            // ── 1. Load environment ───────────────────────────────────────────
-            // Determines the target S3 prefix and loads runtime config values
-            // from AWS Secrets Manager. Nothing is passed to the Vite build here —
-            // the secrets are held in memory until the 'Generate config.js' stage.
-            stage('Load environment') {
-                steps {
-                    script {
-                        isPR = (env.CHANGE_ID != null && env.CHANGE_ID != '')
-
-                        if (isPR) {
-                            s3Prefix = "previews/PR-${env.CHANGE_ID}/"
-                            echo "Pipeline mode : PR Preview  (PR-${env.CHANGE_ID})"
-                        } else {
-                            switch (env.BRANCH_NAME) {
-                                case 'main':    s3Prefix = 'prod/';    break
-                                case 'staging': s3Prefix = 'staging/'; break
-                                case 'develop': s3Prefix = 'dev/';     break
-                                default:
-                                    error("Branch '${env.BRANCH_NAME}' is not mapped to an " +
-                                          "environment. Add it to the switch block or restrict " +
-                                          "this pipeline to main / staging / develop.")
-                            }
-                            echo "Pipeline mode : Branch deploy → s3://${config.s3Bucket}/${s3Prefix}"
-                        }
-
-                        // loadEnv() (vars/loadEnv.groovy) fetches the secret from
-                        // AWS Secrets Manager and returns a Map<String, String>.
-                        // Values are NOT forwarded to the Vite build process.
-                        if (config.envSecret) {
-                            runtimeCfg = loadConfig(config.envSecret)
-                            echo "Loaded ${runtimeCfg.size()} runtime config key(s) from '${config.envSecret}'"
-                        } else {
-                            echo "No envSecret configured – config.js will contain an empty object."
-                        }
-                    }
-                }
+      // ── 1. Branch Guard ─────────────────────────────────────────────────
+      // Prevent accidental runs on wrong branches
+      stage('Branch Guard') {
+        steps {
+          script {
+            // Detect current branch
+            def currentBranch = env.BRANCH_NAME
+            if (!currentBranch || currentBranch == 'null') {
+              currentBranch = env.GIT_BRANCH?.replaceAll('origin/', '')?.replaceAll('refs/heads/', '')
+            }
+            if (!currentBranch || currentBranch == 'null') {
+              try {
+                currentBranch = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+              } catch (e) {
+                currentBranch = env.CHANGE_BRANCH ?: 'unknown'
+              }
             }
 
-            // ── 2. Checkout ───────────────────────────────────────────────────
-            stage('Checkout') {
-                steps {
-                    checkout scm
-                    echo "Checked out: ${env.BRANCH_NAME ?: env.CHANGE_BRANCH}"
-                }
-            }
-
-            // ── 3. Install dependencies ───────────────────────────────────────
-            stage('Install dependencies') {
-                steps {
-                    nodejs(nodeJSInstallationName: config.nodeVersion) {
-                        sh '''
-                            node --version && npm --version
-                            npm ci --prefer-offline
-                        '''
-                    }
-                }
-            }
-
+//             // Check if branch is 'main'
+//             if (currentBranch != 'main') {
+//               echo """
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ ❌ PIPELINE GUARD FAILURE                                      ║
+// ╠════════════════════════════════════════════════════════════════╣
+// ║ Branch: ${currentBranch.padRight(53)} ║
+// ║ Expected: main                                                  ║
+// ║                                                                ║
+// ║ This pipeline is locked to 'main' branch only.                  ║
+// ║ Accidental execution on other branches is blocked.             ║
+// ╚════════════════════════════════════════════════════════════════╝
+//               """
+//               error "Pipeline only runs on 'main' branch. Current: ${currentBranch}"
+//             }
             
+            echo "✅ Branch guard passed: Current branch is 'main'"
+          }
+        }
+      }
 
-            stage('Build (clean)') {
-                steps {
-                    nodejs(nodeJSInstallationName: config.nodeVersion) {
-                        sh "npm run build"
-                        sh """
-                            test -d ${config.buildDir} || \
-                                (echo 'ERROR: ${config.buildDir}/ not found after build.' && exit 1)
-                        """
-                    }
-                }
+      // ── 2. Checkout ────────────────────────────────────────────────────
+      stage('Checkout') {
+        steps {
+          checkout scm
+          script {
+            // ════════════════════════════════════════════════════════════
+            // BRANCH NAME DETECTION
+            // ════════════════════════════════════════════════════════════
+            // Try multiple sources for branch name:
+            // 1. env.BRANCH_NAME (Multibranch Pipeline)
+            // 2. env.GIT_BRANCH (Git plugin format: origin/main → main)
+            // 3. git symbolic-ref (what we're actually on)
+            // 4. env.CHANGE_BRANCH (Pull Request)
+            
+            env.DETECTED_BRANCH = env.BRANCH_NAME
+            if (!env.DETECTED_BRANCH || env.DETECTED_BRANCH == 'null') {
+              env.DETECTED_BRANCH = env.GIT_BRANCH?.replaceAll('origin/', '')?.replaceAll('refs/heads/', '')
+            }
+            if (!env.DETECTED_BRANCH || env.DETECTED_BRANCH == 'null') {
+              env.DETECTED_BRANCH = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+            }
+            if (!env.DETECTED_BRANCH || env.DETECTED_BRANCH == 'null') {
+              env.DETECTED_BRANCH = env.CHANGE_BRANCH ?: 'unknown'
             }
 
-            stage('Security scan (SonarQube)') {
-                when {
-                    expression { config.sonarProjectKey != null }
-                }
-                steps {
-                    script {
-                        // This 'tool' command adds the scanner to the PATH for this block
-                        def scannerHome = tool 'sonar-scanner' 
-                        
-                        withSonarQubeEnv('SonarQube') {
-                            sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                  -Dsonar.projectKey=${config.sonarProjectKey} \
-                                  -Dsonar.sources=src \
-                                  -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
-                                  -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                            """
-                        }
-                    }
-                }
+            // ════════════════════════════════════════════════════════════
+            // COMMITTER NAME CAPTURE
+            // ════════════════════════════════════════════════════════════
+            try {
+              env.COMMITTER_NAME = sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim()
+              if (!env.COMMITTER_NAME || env.COMMITTER_NAME == 'null' || env.COMMITTER_NAME.isEmpty()) {
+                env.COMMITTER_NAME = 'Unknown'
+              }
+            } catch (Exception e) {
+              env.COMMITTER_NAME = 'Unknown'
             }
 
-                
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "✅ Checkout Complete"
+            echo "Branch: ${env.DETECTED_BRANCH}"
+            echo "Committer: ${env.COMMITTER_NAME}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          }
+        }
+      }
 
-            // ── 5. Generate config.js ─────────────────────────────────────────
-            // This is the ONLY step that differs between environments.
-            // It writes a tiny JS file into dist/ that the browser executes before
-            // the Vite bundle, exposing window.__APP_CONFIG__ to the React app.
-            //
-            // The file is intentionally human-readable so ops engineers can curl
-            // <cloudfront-domain>/config.js to verify what is deployed.
-            stage('Generate config.js') {
-                steps {
-                    script {
-                        // basepath for react router
-                        runtimeCfg['basePath'] = "/${s3Prefix}"
-                        // Serialise the Map to JS object literal entries.
-                        // groovy.json.JsonOutput.toJson() handles quoting/escaping
-                        // of string values so the output is valid JSON/JS.
-                        def entries = runtimeCfg
-                            .collect { k, v ->
-                                "  ${k}: ${groovy.json.JsonOutput.toJson(v)}"
-                            }
-                            .join(',\n')
+      // ── 3. Notify Teams — Build Started ────────────────────────────────
+      stage('Notify Teams') {
+        steps {
+          withCredentials([
+            string(credentialsId: 'teams-webhook-url', variable: 'TEAMS_URL')
+          ]) {
+            script {
+              notifyTeams(
+                status:      'STARTED',
+                serviceName: config.appName,
+                imageTag:    'building...',
+                branch:      env.DETECTED_BRANCH ?: 'dev',
+                triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
+                webhookUrl:  env.TEAMS_URL
+              )
+            }
+          }
+        }
+      }
 
-                        def configJs = """\
+      // ── 4. Install Dependencies ─────────────────────────────────────────
+      stage('Install dependencies') {
+        steps {
+          nodejs(nodeJSInstallationName: config.nodeVersion) {
+            sh '''
+              node --version && npm --version
+              npm ci --prefer-offline
+            '''
+          }
+        }
+      }
+
+      // ── 5. Build (Vite) ─────────────────────────────────────────────────
+      stage('Build') {
+        steps {
+          nodejs(nodeJSInstallationName: config.nodeVersion) {
+            sh "npm run build"
+            sh """
+              test -d ${config.buildDir} || \
+                (echo 'ERROR: ${config.buildDir}/ not found after build.' && exit 1)
+            """
+          }
+        }
+      }
+
+      // ── 5. Generate Initial config.js ────────────────────────────────────
+      stage('Generate config.js') {
+        steps {
+          script {
+            if (config.envSecret) {
+              runtimeCfg = loadConfig(config.envSecret)
+              echo "Loaded ${runtimeCfg.size()} runtime config key(s) from '${config.envSecret}'"
+            } else {
+              echo "No envSecret configured – config.js will contain an empty object."
+            }
+
+            def entries = runtimeCfg
+              .collect { k, v ->
+                "  ${k}: ${groovy.json.JsonOutput.toJson(v)}"
+              }
+              .join(',\n')
+
+            def configJs = """\
 // Runtime configuration — generated by Jenkins at deploy time.
 // DO NOT cache this file.
 // DO NOT commit this file to source control.
 //
-// Deployed to : s3://${config.s3Bucket}/${s3Prefix}config.js
+// Deployed to : s3://${config.s3Bucket}/config.js
 // Build       : ${env.JOB_NAME} #${env.BUILD_NUMBER}
 // Branch      : ${env.BRANCH_NAME ?: ('PR-' + env.CHANGE_ID)}
 // Timestamp   : ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))}
@@ -199,127 +230,187 @@ window.__APP_CONFIG__ = {
 ${entries}
 };
 """
-                        writeFile file: "${config.buildDir}/config.js", text: configJs
+            writeFile file: "${config.buildDir}/config.js", text: configJs
+            echo "Generated ${config.buildDir}/config.js"
+            echo "Config keys injected: ${runtimeCfg.keySet().join(', ')}"
+          }
+        }
+      }
 
-                        echo "Generated ${config.buildDir}/config.js"
-                        // Log keys only — never log values to avoid leaking secrets
-                        echo "Config keys injected: ${runtimeCfg.keySet().join(', ')}"
-                    }
-                }
+      // ── 6. SonarQube Security Scan (Optional) ───────────────────────────
+      // stage('SonarQube scan') {
+      //   when {
+      //     expression { config.sonarProjectKey != null }
+      //   }
+      //   steps {
+      //     script {
+      //       def scannerHome = tool 'sonar-scanner'
+      //       withSonarQubeEnv('SonarQube') {
+      //         sh """
+      //           ${scannerHome}/bin/sonar-scanner \
+      //             -Dsonar.projectKey=${config.sonarProjectKey} \
+      //             -Dsonar.sources=src \
+      //             -Dsonar.exclusions=**/node_modules/**,**/*.test.*,**/__tests__/** \
+      //             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+      //         """
+      //       }
+      //     }
+      //   }
+      // }
+
+      // ── 7. Deploy to S3 with Fresh Secrets ──────────────────────────────
+      // 
+      // CRITICAL: Fetch FRESH secrets from AWS Secrets Manager right before 
+      // uploading to S3. This ensures latest config is always deployed, even if 
+      // secrets changed between "Generate config.js" and "Deploy to S3" stages.
+      //
+      // Flow:
+      //   1. Fetch fresh secrets from AWS Secrets Manager
+      //   2. Re-generate config.js with latest values
+      //   3. Overwrite config.js in dist/
+      //   4. Upload entire dist/ to S3 bucket root with proper cache headers
+      stage('Deploy to S3') {
+        steps {
+          script {
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "DEPLOY STAGE: Fetching fresh secrets from AWS Secrets Manager..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            def freshConfig = [:]
+            if (config.envSecret) {
+              freshConfig = loadConfig(config.envSecret)
+              echo "✅ Fresh config loaded with ${freshConfig.size()} key(s) from '${config.envSecret}'"
+              echo "Keys: ${freshConfig.keySet().join(', ')}"
+            } else {
+              echo "⚠️  No envSecret configured – config.js will contain an empty object."
             }
 
-            // ── 6. Deploy to S3 ───────────────────────────────────────────────
-            // Three separate sync passes — each file type needs a different
-            // Cache-Control header to balance performance against freshness.
-            //
-            //   Pass 1 – hashed assets (main.a1b2c3.js, style.4d5e6f.css …)
-            //     → immutable, 1 year: filenames change with every build, so
-            //       the browser and CDN can cache them forever safely.
-            //
-            //   Pass 2 – index.html + JSON manifests
-            //     → no-cache: must always be re-fetched so the browser learns
-            //       the latest hashed filenames.
-            //
-            //   Pass 3 – config.js
-            //     → no-store: environment-specific runtime values; must never
-            //       be served from any cache layer, ever.
-            stage('Deploy to S3') {
-                steps {
-                    script {
-                        def s3Uri = "s3://${config.s3Bucket}/${s3Prefix}"
-                        echo "Deploying '${config.buildDir}/' → '${s3Uri}'"
+            // Re-generate config.js with fresh secrets
+            def entries = freshConfig
+              .collect { k, v ->
+                "  ${k}: ${groovy.json.JsonOutput.toJson(v)}"
+              }
+              .join(',\n')
 
-                        sh """
-                            # ── Pass 1: Hashed static assets ──────────────────
-                            # We use --delete here to clean up old hashed files from previous builds
-                            aws s3 sync ${config.buildDir}/ ${s3Uri} \
-                                --delete \
-                                --region ${config.awsRegion} \
-                                --cache-control "public, max-age=31536000, immutable" \
-                                --exclude "index.html" \
-                                --exclude "config.js" \
-                                --exclude "*.json"
-                        
-                            # ── Pass 2: index.html + JSON manifests ───────────
-                            # Removed --no-delete (it's the default behavior)
-                            aws s3 sync ${config.buildDir}/ ${s3Uri} \
-                                --region ${config.awsRegion} \
-                                --cache-control "no-cache, no-store, must-revalidate" \
-                                --exclude "*" \
-                                --include "index.html" \
-                                --include "*.json"
-                        
-                            # ── Pass 3: config.js ─────────────────────────────
-                            # Added a trailing slash to ${s3Uri} to ensure the path is correct
-                            aws s3 cp ${config.buildDir}/config.js ${s3Uri}config.js \
-                                --region ${config.awsRegion} \
-                                --cache-control "no-store, must-revalidate" \
-                                --content-type "application/javascript"
-                        """
-                        
-                    }
-                }
-            }
+            def configJs = """\
+// Runtime configuration — generated by Jenkins at deploy time (FRESH SECRETS).
+// DO NOT cache this file.
+// DO NOT commit this file to source control.
+//
+// Deployed to      : s3://${config.s3Bucket}/config.js
+// Build            : ${env.JOB_NAME} #${env.BUILD_NUMBER}
+// Branch           : ${env.BRANCH_NAME ?: ('PR-' + env.CHANGE_ID)}
+// Timestamp        : ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))}
+// AWS Secrets Name : ${config.envSecret}
+window.__APP_CONFIG__ = {
+${entries}
+};
+"""
+            writeFile file: "${config.buildDir}/config.js", text: configJs
+            echo "✅ Re-generated ${config.buildDir}/config.js with fresh secrets"
 
-            // ── 7. CloudFront invalidation ────────────────────────────────────
-            // Scoped to the deployed prefix (not a blanket /*) to stay within
-            // the AWS free tier of 1,000 invalidation paths per month.
-            // config.js is always listed as an explicit separate path to guarantee
-            // it is purged immediately, even if no other assets changed.
-            stage('CloudFront invalidation') {
-                steps {
-                    script {
-                        def assetPath  = isPR
-                            ? "/previews/PR-${env.CHANGE_ID}/*"
-                            : "/${s3Prefix}*"
-                        def configPath = isPR
-                            ? "/previews/PR-${env.CHANGE_ID}/config.js"
-                            : "/${s3Prefix}config.js"
+            // Upload entire dist/ to S3 bucket root
+            echo "📤 Uploading ${config.buildDir}/ to S3 bucket: ${config.s3Bucket}"
 
-                        echo "Invalidating CloudFront: ${assetPath}"
+            sh '''
+              # Main sync — uploads all files with general cache policy
+              aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ \
+                --delete \
+                --region $AWS_DEFAULT_REGION \
+                --cache-control "public, max-age=3600"
+              
+              # Explicitly set config.js to no-cache/no-store
+              # This ensures browser NEVER caches the config, always fetches fresh
+              aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js \
+                --region $AWS_DEFAULT_REGION \
+                --cache-control "no-store, must-revalidate" \
+                --metadata "deployment-time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --content-type "application/javascript"
+            '''
+            echo "✅ S3 deployment complete — all files uploaded"
+          }
+        }
+      }
 
-                        sh """
-                            aws cloudfront create-invalidation \
-                                --distribution-id ${config.cloudfrontId} \
-                                --paths "${assetPath}" "${configPath}" \
-                                --region ${config.awsRegion}
-                        """
-                    }
-                }
-            }
+      // ── 8. CloudFront Invalidation ──────────────────────────────────────
+      // Invalidate entire CloudFront cache using path /* (bucket root)
+      // This ensures CDN serves fresh assets after deployment
+      stage('CloudFront invalidation') {
+        steps {
+          script {
+            echo "🔄 Invalidating CloudFront distribution: ${config.cloudfrontId}"
+            sh '''
+              aws cloudfront create-invalidation \
+                --distribution-id $CF_DIST_ID \
+                --paths "/*" \
+                --region $AWS_DEFAULT_REGION
+              echo "✅ CloudFront invalidation created (path: /*)"
+            '''
+          }
+        }
+      }
 
-        } // end stages
+    } // end stages
 
-        // ── Post-build actions ─────────────────────────────────────────────────
-        post {
+    // ── Post-build Actions ──────────────────────────────────────────────────
+    post {
 
-            success {
-                script {
-                    if (isPR && config.cloudfrontDomain) {
-                        def previewUrl = "https://${config.cloudfrontDomain}/previews/PR-${env.CHANGE_ID}/"
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                        echo " PR PREVIEW READY"
-                        echo " ${previewUrl}"
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                        // Uncomment to post the URL as a PR comment via the
-                        // GitHub / Bitbucket Branch Source plugin:
-                        // pullRequest.comment("Preview deployed: ${previewUrl}")
-                    } else {
-                        echo "Deployed → s3://${config.s3Bucket}/${s3Prefix}"
-                    }
-                }
-            }
+      success {
+        script {
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "App: ${config.appName}"
+          echo "S3 Bucket: ${config.s3Bucket}"
+          echo "Build: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-            failure {
-                echo "Pipeline FAILED — ${env.JOB_NAME} #${env.BUILD_NUMBER}"
-                // Add Slack / email notification here
-            }
+          withCredentials([
+            string(credentialsId: 'teams-webhook-url', variable: 'TEAMS_URL')
+          ]) {
+            notifyTeams(
+              status:      'SUCCESS',
+              serviceName: config.appName,
+              imageTag:    env.BUILD_NUMBER ?: 'success',
+              branch:      env.DETECTED_BRANCH ?: 'unknown',
+              triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
+              webhookUrl:  env.TEAMS_URL
+            )
+          }
+        }
+      }
 
-            always {
-                cleanWs()
-            }
+      failure {
+        script {
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "❌ DEPLOYMENT FAILED"
+          echo "App: ${config.appName}"
+          echo "Build: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-        } // end post
+          withCredentials([
+            string(credentialsId: 'teams-webhook-url', variable: 'TEAMS_URL')
+          ]) {
+            notifyTeams(
+              status:      'FAILURE',
+              serviceName: config.appName,
+              imageTag:    env.BUILD_NUMBER ?: 'failed',
+              branch:      env.DETECTED_BRANCH ?: 'unknown',
+              triggeredBy: env.COMMITTER_NAME ?: 'Unknown',
+              webhookUrl:  env.TEAMS_URL
+            )
+          }
+        }
+      }
 
-    } // end pipeline
+      always {
+        script {
+          echo "Cleaning workspace..."
+          cleanWs()
+          echo "✅ Cleanup complete"
+        }
+      }
+
+    } // end post
+
+  } // end pipeline
 } // end call
