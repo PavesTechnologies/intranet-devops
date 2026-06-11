@@ -188,20 +188,19 @@ def call(Map config) {
           }
         }
       }
-        always {
+         always {
         script {
           echo "Post-build cleanup..."
-
           // Remove built image from local daemon
           sh "docker rmi ${env.FULL_IMAGE} 2>/dev/null || true"
-
-          // Remove dangling images and build cache
+          // Remove dangling images
           sh "docker image prune -f || true"
+          // Prune default builder cache
           sh "docker builder prune -af || true"
-
+          // Prune the named buildx builder cache (this is the one that grows)
+          sh "docker buildx prune --builder paves-builder -f --keep-storage=3GB || true"
           // Clean workspace
           cleanWs()
-
           sh "df -h"
           echo "Cleanup complete."
         }
