@@ -19,7 +19,7 @@ def call(Map config) {
 
   pipeline {
     // agent { label 'worker' }
-
+    agent any
     stages {
 
       stage('Checkout') {
