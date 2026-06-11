@@ -1,8 +1,17 @@
 def call(Map config) {
 
-  // Block CD from running on PR builds — CHANGE_ID is set by Jenkins for any PR trigger
+  // Block CD on PR builds — CHANGE_ID is set by Jenkins for any PR trigger
   if (env.CHANGE_ID) {
-    echo "CD skipped: PR #${env.CHANGE_ID} → '${env.CHANGE_TARGET}'. CD only runs on direct pushes to the branch."
+    echo "CD skipped: PR #${env.CHANGE_ID} → '${env.CHANGE_TARGET}'. CD only runs on direct branch pushes."
+    currentBuild.result = 'ABORTED'
+    return
+  }
+
+  // Block CD if triggered from the wrong branch
+  def expectedBranch = config.branch ?: 'dev'
+  def currentBranch  = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').replace('origin/', '').trim()
+  if (currentBranch && currentBranch != expectedBranch) {
+    echo "CD skipped: running on '${currentBranch}', expected '${expectedBranch}'."
     currentBuild.result = 'ABORTED'
     return
   }
