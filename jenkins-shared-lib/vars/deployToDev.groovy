@@ -210,7 +210,6 @@ def call(Map config) {
             cleanWs()
             sh "df -h"
             echo "Cleanup complete."
-          }
         }
       }
     }
