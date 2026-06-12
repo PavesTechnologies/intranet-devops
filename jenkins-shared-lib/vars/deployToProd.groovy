@@ -27,6 +27,7 @@ def call(Map config) {
   def devRepo     = prodRepo.replace('-prod', '-dev') // e.g. 'paves/ums-dev'
   def prodBranch  = config.prodBranch ?: 'main'
   def devopsRepo  = 'PavesTechnologies/intranet-devops'
+  def ec2Host     = config.ec2Host ?: '13.204.95.26'
 
   pipeline {
     agent { label 'worker' }
