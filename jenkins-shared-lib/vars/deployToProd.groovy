@@ -119,18 +119,24 @@ def call(Map config) {
             )
           ]) {
             sh """
+              echo "Updating deployment.yaml in ${prodBranch} branch..."
+
+              # Clone devops repo
               rm -rf /tmp/gitops-prod
-              git clone \
-                https://\$GIT_USER:\$GIT_TOKEN@github.com/${devopsRepo}.git \
+              git clone \\
+                https://\$GIT_USER:\$GIT_TOKEN@github.com/${devopsRepo}.git \\
                 /tmp/gitops-prod
 
               cd /tmp/gitops-prod
               git checkout ${prodBranch}
 
+              # Update image tag
               DEPLOY="k8s/backend/${serviceName}/deployment.yaml"
+              sed -i "s|^          image:.*|          image: ${env.PROD_IMAGE}|" \$DEPLOY
 
-              sed -i "s|image:.*${ecrRegistry}.*|          image: ${env.PROD_IMAGE}|" \$DEPLOY
+              echo "Updated image to: ${env.PROD_IMAGE}"
 
+              # Push
               git config user.email "jenkins@pavestechnologies.com"
               git config user.name  "Jenkins CD"
               git add \$DEPLOY
@@ -138,7 +144,7 @@ def call(Map config) {
               git push origin ${prodBranch}
 
               rm -rf /tmp/gitops-prod
-              echo "GitOps updated on ${prodBranch}. ArgoCD will deploy to prod."
+              echo "GitOps updated. ArgoCD will deploy automatically."
             """
           }
         }
