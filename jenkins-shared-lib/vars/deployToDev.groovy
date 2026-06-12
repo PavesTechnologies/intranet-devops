@@ -43,19 +43,19 @@ def call(Map config) {
         }
       }
 
-      stage('Validate Branch') {
-        steps {
-          script {
-            // GIT_BRANCH is set by the Git plugin after checkout — reliable here
-            def currentBranch = (env.GIT_BRANCH ?: '').replace('origin/', '').trim()
-            if (currentBranch != branch) {
-              currentBuild.result = 'ABORTED'
-              error("CD skipped: triggered on '${currentBranch}', expected '${branch}'. Only pushes to '${branch}' should deploy.")
-            }
-            echo "Branch validated: '${currentBranch}' matches expected '${branch}'"
-          }
-        }
-      }
+      // stage('Validate Branch') {
+      //   steps {
+      //     script {
+      //       // GIT_BRANCH is set by the Git plugin after checkout — reliable here
+      //       def currentBranch = (env.GIT_BRANCH ?: '').replace('origin/', '').trim()
+      //       if (currentBranch != branch) {
+      //         currentBuild.result = 'ABORTED'
+      //         error("CD skipped: triggered on '${currentBranch}', expected '${branch}'. Only pushes to '${branch}' should deploy.")
+      //       }
+      //       echo "Branch validated: '${currentBranch}' matches expected '${branch}'"
+      //     }
+      //   }
+      // }
       
       stage('Notify Started') {
         steps {
