@@ -108,6 +108,26 @@ def call(Map config) {
         }
       }
 
+      stage('Sync Secrets on EC2') {
+        steps {
+          withCredentials([
+            sshUserPrivateKey(
+              credentialsId: 'ec2-ssh-key-prod',
+              keyFileVariable: 'SSH_KEY'
+            )
+          ]) {
+            sh """
+              ssh -o StrictHostKeyChecking=no \
+                  -i \$SSH_KEY \
+                  ubuntu@${ec2Host} \
+                  "~/k8s/sync-secrets.sh && ~/refresh-ecr-k3s.sh"
+              echo "Secrets synced."
+            """
+          }
+        }
+      }
+
+
       // ── STEP 4: Update GitOps → ArgoCD deploys ───────────────────────────
       stage('Update GitOps Repo') {
         steps {
