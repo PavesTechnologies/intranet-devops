@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: pms
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/pms-prod:prod-bc260b5
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/pms-prod:prod-2a38e03
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
