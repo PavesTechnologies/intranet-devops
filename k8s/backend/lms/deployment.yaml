@@ -26,7 +26,7 @@ spec:
         - name: ecr-pull-secret
       containers:
         - name: lms
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/lms-dev:dev-656c987
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/lms-dev:dev-a8f0846
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9999
