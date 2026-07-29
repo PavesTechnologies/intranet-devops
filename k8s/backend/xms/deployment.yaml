@@ -27,7 +27,7 @@ spec:
           image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/xms-dev:latest1
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 5000
+            - containerPort: 8080
           envFrom:
             - secretRef:
                 name: xms-secrets
@@ -43,13 +43,13 @@ spec:
               memory: "768Mi"
           livenessProbe:
             tcpSocket:
-              port: 5000
+              port: 8080
             initialDelaySeconds: 90
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
-              port: 5000
+              port: 8080
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 3
