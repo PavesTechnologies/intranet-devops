@@ -59,3 +59,10 @@ spec:
                 name: eos-service
                 port:
                   number: 8000
+          - path: /xms
+            pathType: Prefix
+            backend:
+              service:
+                name: xms-service
+                port:
+                  number: 8080

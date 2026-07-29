@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xms-deployment
+  namespace: backend
+  labels:
+    app: xms
+    team: paves
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xms
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: xms
+    spec:
+      serviceAccountName: paves-service-account
+      containers:
+        - name: xms
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/xms-dev:dev-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - secretRef:
+                name: xms-secrets
+          env:
+            - name: SERVER_SERVLET_CONTEXT_PATH
+              value: "/xms"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "768Mi"
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
