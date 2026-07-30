@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: ums
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/ums-prod:prod-5860590
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/ums-prod:prod-d625113
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
