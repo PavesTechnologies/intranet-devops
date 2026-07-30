@@ -34,6 +34,10 @@ spec:
           env:
             - name: SERVER_SERVLET_CONTEXT_PATH
               value: "/xms"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-service.infra.svc.cluster.local:9092"
+            - name: CDC_EMPLOYEE_TOPIC
+              value: "eos_dev.eos.employee_details"
           resources:
             requests:
               cpu: "100m"
