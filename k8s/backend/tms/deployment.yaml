@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: tms
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/tms-prod:prod-44738c3
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/tms-prod:prod-95ffa21
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
