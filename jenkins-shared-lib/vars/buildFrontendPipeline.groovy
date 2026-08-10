@@ -187,19 +187,21 @@ def call(Map config) {
         }
       }
 
-      // ── 5. Build (Vite) ─────────────────────────────────────────────────
-      stage('Build') {
-        steps {
-          nodejs(nodeJSInstallationName: config.nodeVersion) {
-            sh 'export NODE_OPTIONS=--max-old-space-size=4096'
-            sh "npm run build"
-            sh """
-              test -d ${config.buildDir} || \
-                (echo 'ERROR: ${config.buildDir}/ not found after build.' && exit 1)
-            """
+     // ── 5. Build (Vite) ─────────────────────────────────────────────────
+        stage('Build') {
+          steps {
+            nodejs(nodeJSInstallationName: config.nodeVersion) {
+              sh '''
+                export NODE_OPTIONS=--max-old-space-size=4096
+                npm run build
+              '''
+              sh """
+                test -d ${config.buildDir} || \
+                  (echo 'ERROR: ${config.buildDir}/ not found after build.' && exit 1)
+              """
+            }
           }
         }
-      }
 
       // ── 5. Generate Initial config.js ────────────────────────────────────
       stage('Generate config.js') {
