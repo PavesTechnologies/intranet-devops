@@ -191,6 +191,7 @@ def call(Map config) {
       stage('Build') {
         steps {
           nodejs(nodeJSInstallationName: config.nodeVersion) {
+            sh 'export NODE_OPTIONS=--max-old-space-size=4096'
             sh "npm run build"
             sh """
               test -d ${config.buildDir} || \
