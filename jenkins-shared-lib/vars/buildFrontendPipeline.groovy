@@ -181,7 +181,7 @@ def call(Map config) {
           nodejs(nodeJSInstallationName: config.nodeVersion) {
             sh '''
               node --version && npm --version
-              npm install
+              npm  ci --prefer-offline
             '''
           }
         }
