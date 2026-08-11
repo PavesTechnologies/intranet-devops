@@ -181,7 +181,15 @@ def call(Map config) {
           nodejs(nodeJSInstallationName: config.nodeVersion) {
             sh '''
               node --version && npm --version
-              npm ci --prefer-offline
+              
+              # Clean existing directory
+              rm -rf node_modules
+              
+              # Install packages
+              npm install --legacy-peer-deps
+              
+              # Explicitly force-install the Linux Rollup binary required for Jenkins
+              npm install @rollup/rollup-linux-x64-gnu --no-save
             '''
           }
         }
@@ -192,7 +200,7 @@ def call(Map config) {
           steps {
             nodejs(nodeJSInstallationName: config.nodeVersion) {
               sh '''
-                export NODE_OPTIONS=--max-old-space-size=4096
+                export NODE_OPTIONS=--max-old-space-size=2816
                 npm run build
               '''
               sh """
