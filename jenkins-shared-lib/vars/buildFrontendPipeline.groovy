@@ -182,11 +182,14 @@ def call(Map config) {
             sh '''
               node --version && npm --version
               
-              # Clean existing modules to clear broken platform bindings
+              # Clean existing directory
               rm -rf node_modules
               
-              # Force npm to pull optional platform binaries (like rollup-linux-x64-gnu)
-              npm install --legacy-peer-deps --include=optional
+              # Install packages
+              npm install --legacy-peer-deps
+              
+              # Explicitly force-install the Linux Rollup binary required for Jenkins
+              npm install @rollup/rollup-linux-x64-gnu --no-save
             '''
           }
         }
