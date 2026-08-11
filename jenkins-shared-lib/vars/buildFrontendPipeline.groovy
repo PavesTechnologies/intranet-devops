@@ -200,7 +200,7 @@ def call(Map config) {
             steps {
               nodejs(nodeJSInstallationName: config.nodeVersion) {
                 sh '''
-                  export NODE_OPTIONS=--max-old-space-size=4096
+                  export NODE_OPTIONS=--max-old-space-size=2816
                   npm run build
                 '''
                 sh """
