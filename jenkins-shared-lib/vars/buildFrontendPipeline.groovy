@@ -181,7 +181,12 @@ def call(Map config) {
           nodejs(nodeJSInstallationName: config.nodeVersion) {
             sh '''
               node --version && npm --version
-              npm  ci --prefer-offline
+              
+              # Clean existing modules to clear broken platform bindings
+              rm -rf node_modules
+              
+              # Force npm to pull optional platform binaries (like rollup-linux-x64-gnu)
+              npm install --legacy-peer-deps --include=optional
             '''
           }
         }
