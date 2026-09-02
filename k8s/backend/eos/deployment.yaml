@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: eos
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/eos-prod:prod-590b688b
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/eos-prod:prod-361940d2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
