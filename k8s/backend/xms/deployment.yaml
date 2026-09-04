@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: xms
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/xms-dev:dev-5cbb69a
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/xms-dev:dev-feaa0dc
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
