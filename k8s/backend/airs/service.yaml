@@ -1,0 +1,20 @@
+# Copy to intranet-devops at:  k8s/backend/airs/service.yaml
+#
+# Only the API gets a Service. The Celery worker and beat listen on nothing -
+# they reach Redis and PostgreSQL outbound and are never dialled inbound.
+apiVersion: v1
+kind: Service
+metadata:
+  name: airs-service
+  namespace: backend
+  labels:
+    app: airs-api
+    team: paves
+spec:
+  type: ClusterIP
+  selector:
+    app: airs-api
+  ports:
+    - port: 8002
+      targetPort: 8002
+      protocol: TCP
