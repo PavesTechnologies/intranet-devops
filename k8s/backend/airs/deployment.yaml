@@ -1,0 +1,214 @@
+# ==============================================================================
+# AIRS - three Deployments from ONE image (api / worker / beat).
+#
+# Copy to intranet-devops at exactly:  k8s/backend/airs/deployment.yaml
+# on BOTH the dev and main branches (ArgoCD tracks dev; deployToProd writes main).
+#
+# ⚠ THE 10-SPACE INDENTATION ON EVERY `image:` LINE IS LOAD-BEARING.
+# deployToDev/deployToProd retag with:
+#     sed -i "s|^          image:.*|          image: <new>|g"
+# That anchors on exactly ten leading spaces and is global, so all three
+# Deployments below get the new tag in one pass - which is what we want, since
+# all three run the same image. Re-indent an `image:` line and that Deployment
+# silently stops being updated by CD, pinning it to a stale tag forever.
+# ==============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airs-api-deployment
+  namespace: backend
+  labels:
+    app: airs-api
+    team: paves
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airs-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: airs-api
+    spec:
+      serviceAccountName: paves-service-account
+      # The image is arm64-only. On a mixed-arch cluster this stops the pod
+      # being scheduled onto an amd64 node, where it would CrashLoop with an
+      # exec-format error.
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: airs-api
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-REPLACE_ME
+          imagePullPolicy: IfNotPresent
+          args: ["api"]
+          ports:
+            - containerPort: 8002
+          envFrom:
+            - secretRef:
+                name: airs-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              # Not the 512Mi the other services use: importing torch alone
+              # costs several hundred MB, and sentence-transformers holds the
+              # embedding model resident once loaded.
+              memory: "2Gi"
+          # startupProbe, not a long initialDelay on the readiness probe:
+          # boot imports torch and runs two DB-touching FastAPI startup hooks,
+          # so it can take a while. Up to 5 min here (30 x 10s), after which
+          # the readiness/liveness probes take over on a tight interval.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            periodSeconds: 20
+            failureThreshold: 3
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airs-worker-deployment
+  namespace: backend
+  labels:
+    app: airs-worker
+    team: paves
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airs-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: airs-worker
+    spec:
+      serviceAccountName: paves-service-account
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      # Celery is configured with task_acks_late + task_reject_on_worker_lost,
+      # so a task interrupted by a rollout is redelivered rather than lost.
+      # This grace period lets an in-flight resume/embedding task finish first.
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: airs-worker
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-REPLACE_ME
+          imagePullPolicy: IfNotPresent
+          args: ["worker"]
+          envFrom:
+            - secretRef:
+                name: airs-secrets
+          env:
+            # Each prefork child holds its own SQLAlchemy engine, and
+            # db_pool_size=1 / max_overflow=2 is per-process - PostgreSQL
+            # connections are roughly this x 3. Raise only with RDS headroom.
+            - name: CELERY_CONCURRENCY
+              value: "2"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1536Mi"
+            limits:
+              cpu: "2000m"
+              # Higher than the api: prefork forks CELERY_CONCURRENCY children,
+              # and each one ends up with its own torch/model working set.
+              memory: "3Gi"
+          # No HTTP port to probe - this asks Celery to ping THIS worker by
+          # name (the entrypoint's healthcheck does it), so a wedged container
+          # fails even while other workers in the cluster are healthy.
+          startupProbe:
+            exec:
+              command: ["/usr/local/bin/docker-entrypoint.sh", "healthcheck"]
+            periodSeconds: 15
+            failureThreshold: 24
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/docker-entrypoint.sh", "healthcheck"]
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 3
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airs-beat-deployment
+  namespace: backend
+  labels:
+    app: airs-beat
+    team: paves
+spec:
+  # EXACTLY ONE. beat is a scheduler, not a worker: a second instance
+  # double-fires all 10 entries in celery_app.conf.beat_schedule, several of
+  # which send email (campaign health alerts, stalled-candidate escalations,
+  # interview-feedback requests). Never scale this.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airs-beat
+  strategy:
+    # Recreate, NOT RollingUpdate - and this is the whole reason it is its own
+    # Deployment. A rolling update with maxSurge:1 would briefly run two beat
+    # pods at once, which is precisely the duplicate-scheduling failure above.
+    # Recreate accepts a few seconds of no scheduler instead.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: airs-beat
+    spec:
+      serviceAccountName: paves-service-account
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: airs-beat
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-REPLACE_ME
+          imagePullPolicy: IfNotPresent
+          args: ["beat"]
+          envFrom:
+            - secretRef:
+                name: airs-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "768Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+          volumeMounts:
+            # beat writes its schedule to disk. The image creates
+            # /var/run/celery writable by uid 10001; /app is root-owned and
+            # read-only to the app user. emptyDir is deliberate - the schedule
+            # is a local optimisation, not data worth persisting across a
+            # reschedule, and a PVC here would block the Recreate rollout.
+            - name: beat-schedule
+              mountPath: /var/run/celery
+      volumes:
+        - name: beat-schedule
+          emptyDir: {}
