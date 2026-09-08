@@ -66,4 +66,10 @@ spec:
                 name: xms-service
                 port:
                   number: 8080
-
+          - path: /airs
+            pathType: Prefix
+            backend:
+              service:
+                name: airs-service
+                port:
+                  number: 8002
