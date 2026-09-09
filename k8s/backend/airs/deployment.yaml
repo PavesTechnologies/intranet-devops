@@ -44,7 +44,7 @@ spec:
         kubernetes.io/arch: arm64
       containers:
         - name: airs-api
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-REPLACE_ME
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-a6ca0da
           imagePullPolicy: IfNotPresent
           args: ["api"]
           ports:
@@ -118,7 +118,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: airs-worker
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-REPLACE_ME
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-a6ca0da
           imagePullPolicy: IfNotPresent
           args: ["worker"]
           envFrom:
@@ -188,7 +188,7 @@ spec:
         kubernetes.io/arch: arm64
       containers:
         - name: airs-beat
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-REPLACE_ME
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/airs-dev:dev-a6ca0da
           imagePullPolicy: IfNotPresent
           args: ["beat"]
           envFrom:
