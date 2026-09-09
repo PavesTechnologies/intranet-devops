@@ -53,8 +53,16 @@ spec:
             - secretRef:
                 name: airs-secrets
           resources:
+            # cpu request is a SCHEDULING RESERVATION, not a usage cap - the
+            # limit below is what actually bounds the container. paves-k8s-node-1
+            # is a single 4-vCPU node already at 93% cpu *requested* but only
+            # ~28% used, so a fat request just makes pods unschedulable
+            # ("Insufficient cpu") while wasting nothing but the scheduler's
+            # arithmetic. Keep requests near idle draw and let the limit absorb
+            # bursts. Memory is different - it is not compressible, so its
+            # request stays near real working-set size to avoid eviction.
             requests:
-              cpu: "500m"
+              cpu: "250m"
               memory: "1Gi"
             limits:
               cpu: "2000m"
@@ -132,7 +140,7 @@ spec:
               value: "2"
           resources:
             requests:
-              cpu: "500m"
+              cpu: "250m"
               memory: "1536Mi"
             limits:
               cpu: "2000m"
@@ -205,7 +213,7 @@ spec:
                 name: airs-secrets
           resources:
             requests:
-              cpu: "250m"
+              cpu: "100m"
               memory: "768Mi"
             limits:
               cpu: "1000m"
