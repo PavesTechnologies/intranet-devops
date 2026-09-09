@@ -39,7 +39,7 @@ spec:
             - sh
             - -c
             - |
-              DEBEZIUM_URL="http://10.43.174.242:8083"
+              DEBEZIUM_URL="http://debezium-service.infra.svc.cluster.local:8083"
 
               echo "Waiting for Debezium to be ready..."
 
@@ -62,7 +62,8 @@ spec:
               else
                 echo "Registering UMS source connector..."
 
-                curl -X POST "$DEBEZIUM_URL/connectors" \
+                SRC_HTTP_CODE=$(curl -s -o /tmp/mysql-ums-source-create.json -w "%{http_code}" \
+                  -X POST "$DEBEZIUM_URL/connectors" \
                   -H "Content-Type: application/json" \
                   -d "{
                     \"name\": \"mysql-ums-source\",
@@ -74,7 +75,7 @@ spec:
                       \"database.password\": \"$MYSQL_PASSWORD\",
                       \"database.ssl.mode\": \"preferred\",
 
-                      \"database.server.id\": \"184061\",
+                      \"database.server.id\": \"184063\",
                       \"topic.prefix\": \"ums_cdc\",
 
                       \"database.include.list\": \"ums\",
@@ -91,9 +92,16 @@ spec:
 
                       \"snapshot.mode\": \"initial\"
                     }
-                  }"
+                  }")
 
-                echo "UMS source connector registered."
+                if [ "$SRC_HTTP_CODE" != "200" ] && [ "$SRC_HTTP_CODE" != "201" ]; then
+                  echo "ERROR: UMS source connector registration failed (HTTP $SRC_HTTP_CODE)"
+                  cat /tmp/mysql-ums-source-create.json
+                  echo ""
+                  exit 1
+                fi
+
+                echo "UMS source connector registered (HTTP $SRC_HTTP_CODE)."
               fi
 
 
@@ -109,7 +117,8 @@ spec:
               else
                 echo "Registering EOS source connector..."
 
-                curl -X POST "$DEBEZIUM_URL/connectors" \
+                EOS_HTTP_CODE=$(curl -s -o /tmp/mysql-eos-source-create.json -w "%{http_code}" \
+                  -X POST "$DEBEZIUM_URL/connectors" \
                   -H "Content-Type: application/json" \
                   -d "{
                     \"name\": \"mysql-eos-source\",
@@ -138,9 +147,16 @@ spec:
 
                       \"snapshot.mode\": \"initial\"
                     }
-                  }"
+                  }")
 
-                echo "EOS source connector registered."
+                if [ "$EOS_HTTP_CODE" != "200" ] && [ "$EOS_HTTP_CODE" != "201" ]; then
+                  echo "ERROR: EOS source connector registration failed (HTTP $EOS_HTTP_CODE)"
+                  cat /tmp/mysql-eos-source-create.json
+                  echo ""
+                  exit 1
+                fi
+
+                echo "EOS source connector registered (HTTP $EOS_HTTP_CODE)."
               fi
 
 
@@ -153,14 +169,35 @@ spec:
               sleep 5
 
               echo "----- UMS -----"
-              curl -s \
-                "$DEBEZIUM_URL/connectors/mysql-ums-source/status"
-
+              SRC_STATUS_CODE=$(curl -s -o /tmp/mysql-ums-source-status.json -w "%{http_code}" \
+                "$DEBEZIUM_URL/connectors/mysql-ums-source/status")
+              cat /tmp/mysql-ums-source-status.json
               echo ""
+
+              if [ "$SRC_STATUS_CODE" != "200" ]; then
+                echo "ERROR: could not fetch status for mysql-ums-source (HTTP $SRC_STATUS_CODE)"
+                exit 1
+              fi
+
+              if grep -q '"state":"FAILED"' /tmp/mysql-ums-source-status.json; then
+                echo "ERROR: mysql-ums-source connector/task is in FAILED state."
+                exit 1
+              fi
 
               echo "----- EOS -----"
-              curl -s \
-                "$DEBEZIUM_URL/connectors/mysql-eos-source/status"
-
+              EOS_STATUS_CODE=$(curl -s -o /tmp/mysql-eos-source-status.json -w "%{http_code}" \
+                "$DEBEZIUM_URL/connectors/mysql-eos-source/status")
+              cat /tmp/mysql-eos-source-status.json
               echo ""
+
+              if [ "$EOS_STATUS_CODE" != "200" ]; then
+                echo "ERROR: could not fetch status for mysql-eos-source (HTTP $EOS_STATUS_CODE)"
+                exit 1
+              fi
+
+              if grep -q '"state":"FAILED"' /tmp/mysql-eos-source-status.json; then
+                echo "ERROR: mysql-eos-source connector/task is in FAILED state."
+                exit 1
+              fi
+
               echo "Done."
