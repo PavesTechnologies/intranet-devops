@@ -17,6 +17,24 @@ def call(Map config) {
   def devopsRepo   = 'PavesTechnologies/intranet-devops'
   def dockerfile   = 'arm.Dockerfile'
 
+  // -- QEMU emulator registration (AIRS only) -------------------------------
+  // Only AIRS needs this. Everything else - the shared paves-builder, its
+  // 3GB cache budget, the build commands - is untouched: other services take
+  // the else branch below and behave exactly as before.
+  //
+  // Why only AIRS: it is the only Debian-based image here (the others are
+  // python:*-alpine). Under an outdated qemu-user, glibc CPython's _ssl
+  // extension fails to load during an aarch64 build, so pip loses HTTPS to
+  // every index and dies with:
+  //     ERROR: the ssl module in Python is not available
+  // Alpine/musl images do not trip it, which is why the other services build
+  // fine on the same x86 agent.
+  //
+  // A future service can opt in WITHOUT editing this file, by passing
+  // `installBinfmt: true` in its own Jenkinsfile.cd.
+  def installBinfmt = config.containsKey('installBinfmt') ? config.installBinfmt
+                                                          : (serviceName == 'airs')
+
   pipeline {
     agent { label 'worker' }
     // agent any
@@ -81,18 +99,58 @@ def call(Map config) {
       stage('Build Image') {
         steps {
           script {
-            sh """
-              docker buildx inspect paves-builder > /dev/null 2>&1 || \
-                docker buildx create --name paves-builder --use
-              docker buildx use paves-builder
-              docker buildx build \
-                --platform linux/arm64 \
-                --load \
-                --file ${dockerfile} \
-                --tag ${env.FULL_IMAGE} \
-                .
-              echo "Image built: ${env.FULL_IMAGE}"
-            """
+            if (installBinfmt) {
+              // AIRS: register current QEMU emulators before building.
+              // Idempotent, and ~1s once the binfmt image is cached locally.
+              //
+              // Needs --privileged on the agent. If that is not permitted the
+              // `|| true` keeps the stage going and the build then fails in pip
+              // exactly as it did before - so if the _ssl error comes back,
+              // check privileged first, not the Dockerfile.
+              sh """
+                docker run --privileged --rm tonistiigi/binfmt:latest --install arm64 || true
+
+                # Restart - do NOT remove - the shared builder, so it picks up the
+                # emulator just registered. A BuildKit container captures the
+                # emulator when it starts, so an already-running paves-builder
+                # would keep using the old one and fail identically.
+                #
+                # `stop` keeps the BuildKit state volume, so the build cache the
+                # other services share survives; `buildx rm` would delete it. The
+                # build below bootstraps the builder again automatically.
+                #
+                # This matters after every agent reboot: binfmt registration is
+                # kernel state and is lost on restart, while the builder container
+                # is not - without this line AIRS would fail on the first build
+                # after each reboot.
+                docker buildx stop paves-builder || true
+
+                docker buildx inspect paves-builder > /dev/null 2>&1 || \
+                  docker buildx create --name paves-builder --use
+                docker buildx use paves-builder
+                docker buildx build \
+                  --platform linux/arm64 \
+                  --load \
+                  --file ${dockerfile} \
+                  --tag ${env.FULL_IMAGE} \
+                  .
+                echo "Image built: ${env.FULL_IMAGE}"
+              """
+            } else {
+              // Every other service: unchanged from before (indentation aside).
+              sh """
+                docker buildx inspect paves-builder > /dev/null 2>&1 || \
+                  docker buildx create --name paves-builder --use
+                docker buildx use paves-builder
+                docker buildx build \
+                  --platform linux/arm64 \
+                  --load \
+                  --file ${dockerfile} \
+                  --tag ${env.FULL_IMAGE} \
+                  .
+                echo "Image built: ${env.FULL_IMAGE}"
+              """
+            }
           }
         }
       }
