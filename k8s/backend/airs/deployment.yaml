@@ -145,8 +145,17 @@ spec:
           startupProbe:
             exec:
               command: ["/usr/local/bin/docker-entrypoint.sh", "healthcheck"]
-            periodSeconds: 15
-            failureThreshold: 24
+            # timeoutSeconds is REQUIRED here, not optional: k8s defaults it to
+            # 1 second, and this probe cannot possibly finish in 1s. It shells
+            # out to `celery inspect ping`, which starts a fresh Python process,
+            # imports app.core.celery_app (whose import does a DB round trip for
+            # DEADLINE_CHECK_INTERVAL_HOURS) and then waits on a broker reply.
+            # With the default the probe fails every time, the container is
+            # restart-looped by the startupProbe, and the pod never reaches 1/1
+            # even though the worker inside it logged "ready".
+            timeoutSeconds: 20
+            periodSeconds: 30
+            failureThreshold: 12
           livenessProbe:
             exec:
               command: ["/usr/local/bin/docker-entrypoint.sh", "healthcheck"]
