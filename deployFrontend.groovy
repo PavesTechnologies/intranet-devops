@@ -10,7 +10,7 @@
  *
  * Pipeline (stops at ECR — no GitOps commit, no EC2 secret sync):
  *   1. Checkout code
- *   2. Materialise .env from a Jenkins secret file
+ *   2. Materialise .env from AWS Secrets Manager
  *   3. Build image, linux/amd64  (.env is BAKED IN here)
  *   4. Smoke test the image before it is published
  *   5. Push to ECR  (immutable :main-<sha> + moving :main)
@@ -22,9 +22,9 @@
  *
  *   @Library('paves-website-scripts') _
  *   deployFrontend(
- *     serviceName:      'careers-frontend',
- *     ecrRepo:          'careers-frontend',
- *     envCredentialId:  'careers-frontend-env-dev'
+ *     serviceName: 'careers-frontend',
+ *     ecrRepo:     'careers-frontend',
+ *     secretName:  'careers-frontend-env'   // AWS Secrets Manager secret id
  *   )
  *
  * Builds and tags from `main` by default; override with branch: '<name>'.
@@ -34,8 +34,8 @@ def call(Map config) {
 
   def serviceName = config.serviceName
   def ecrRepo     = config.ecrRepo
-  // Jenkins "Secret file" credential holding this service's .env verbatim.
-  def envCredId   = config.envCredentialId
+  // AWS Secrets Manager secret holding this service's .env as flat JSON.
+  def secretName  = config.secretName
 
   def ecrRegistry = config.ecrRegistry ?: '743737183908.dkr.ecr.ap-south-1.amazonaws.com'
   def region      = config.region      ?: 'ap-south-1'
@@ -43,15 +43,6 @@ def call(Map config) {
 
   pipeline {
     agent { label 'worker' }
-
-    options {
-      timestamps()
-      // Two runs of the same job share a workspace, and this one writes .env
-      // into it. Serialising avoids one build's secrets landing in another's image.
-      disableConcurrentBuilds()
-      timeout(time: 40, unit: 'MINUTES')
-      buildDiscarder(logRotator(numToKeepStr: '30'))
-    }
 
     stages {
 
@@ -64,7 +55,7 @@ def call(Map config) {
             // with a confusing docker or aws error.
             if (!serviceName) { error 'deployFrontend: serviceName is required' }
             if (!ecrRepo)     { error 'deployFrontend: ecrRepo is required' }
-            if (!envCredId)   { error 'deployFrontend: envCredentialId is required' }
+            if (!secretName)  { error 'deployFrontend: secretName is required' }
 
             env.SHORT_SHA    = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
             env.IMAGE_TAG    = "${branch}-${env.SHORT_SHA}"
@@ -109,25 +100,29 @@ def call(Map config) {
         }
       }
 
-      // ── STEP 2: Materialise .env ──────────────────────────────────────
+      // ── STEP 2: Materialise .env from AWS Secrets Manager ─────────────
       // .env is gitignored, so `checkout scm` never brings it. The Dockerfile
       // needs it present in the build context: .dockerignore deliberately does
       // NOT exclude .env, and `next build` inlines NEXT_PUBLIC_* from it.
       stage('Prepare .env') {
         steps {
-          withCredentials([file(credentialsId: envCredId, variable: 'ENV_FILE')]) {
+          withCredentials([[
+            $class:            'AmazonWebServicesCredentialsBinding',
+            credentialsId:     'aws-ecr-credentials',
+            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+          ]]) {
+            script {
+              createEnvFile(secretName, region)
+            }
             sh '''
               set -eu
               test -f Dockerfile || { echo "ERROR: no Dockerfile in repo root"; exit 1; }
 
-              cp "$ENV_FILE" .env
-              chmod 600 .env
-              echo "Wrote .env for build ($(grep -c . .env) non-empty lines)."
-
               # NEXT_PUBLIC_* is inlined at build time and cannot be corrected
-              # later, so a wrong or empty credential must stop the build now.
+              # later, so a wrong or partial secret must stop the build now.
               grep -q "NEXT_PUBLIC_" .env || {
-                echo "ERROR: .env has no NEXT_PUBLIC_ keys - wrong or empty credential?"; exit 1; }
+                echo "ERROR: .env has no NEXT_PUBLIC_ keys - wrong secret?"; exit 1; }
             '''
           }
         }
