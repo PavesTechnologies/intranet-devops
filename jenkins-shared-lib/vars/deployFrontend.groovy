@@ -281,17 +281,32 @@ def call(Map config) {
           environment name: 'DEPLOY_ENABLED', value: 'true'
         }
         steps {
-          withCredentials([[
-            $class:            'AmazonWebServicesCredentialsBinding',
-            credentialsId:     awsCredsId,
-            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-          ]]) {
-            sshagent(credentials: [sshCredsId]) {
+          // sshUserPrivateKey comes from Credentials Binding, so the SSH Agent
+          // plugin is not required. It writes the key to a temporary file and
+          // deletes it when the block exits.
+          withCredentials([
+            [
+              $class:            'AmazonWebServicesCredentialsBinding',
+              credentialsId:     awsCredsId,
+              accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+              secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+            ],
+            sshUserPrivateKey(
+              credentialsId:    sshCredsId,
+              keyFileVariable:  'SSH_KEY',
+              usernameVariable: 'SSH_USER'
+            )
+          ]) {
+            script {
               sh '''
                 set -eu
 
-                SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=15 $VPS_USER@$VPS_HOST"
+                # The credential carries the username; VPS_USER is the fallback
+                # for a credential saved without one.
+                REMOTE_USER="${SSH_USER:-$VPS_USER}"
+                # IdentitiesOnly stops ssh offering the agent's other keys first
+                # and tripping the server's MaxAuthTries.
+                SSH="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=15 $REMOTE_USER@$VPS_HOST"
 
                 echo "=== 1/5  Connectivity and preflight ==================="
                 $SSH "test -f $COMPOSE_DIR/docker-compose.yml" || {
