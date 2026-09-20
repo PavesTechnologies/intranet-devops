@@ -1,27 +1,34 @@
 /**
  * deployBackend.groovy
  *
- * Build/push step for the Spring Boot service:
+ * Build/push/deploy step for the Spring Boot service:
  *   - careers-backend  (github.com/PavesTechnologies/careers-backend)
  *
- * Pipeline (stops at ECR — no GitOps commit, no EC2 secret sync):
+ * Pipeline:
  *   1. Checkout code
- *   2. Build image, linux/amd64   (Maven runs INSIDE the Dockerfile)
- *   3. Verify the image before it is published
- *   4. Push to ECR  (immutable :main-<sha> + moving :main)
+ *   2. Build image               (Maven runs INSIDE the Dockerfile)
+ *   3. Verify the image          (layer extraction, before it is published)
+ *   4. Push to ECR               (one immutable tag: :main-<sha>)
+ *   5. Sync secrets to the VPS   (AWS SSM → /opt/paves/.env.api)
+ *   6. Deploy                    (tag bump, pull, recreate, health-gate, rollback)
  *
- * Deploy is intentionally out of scope: this step only produces and publishes
- * the image. Rolling it out is handled separately.
+ * One tag per build, and it is never reused. "What is running in production" is
+ * therefore always answerable from /opt/paves/.env, and every previous build
+ * stays pullable for rollback. The ECR repositories can be created IMMUTABLE.
  *
  * Two deliberate differences from the frontend step:
  *
- *   - No "Prepare .env". This image never bakes config. .dockerignore excludes
- *     .env, and application.properties imports it optionally at runtime, so the
- *     values arrive from the Kubernetes secret — not from the build.
+ *   - No "Prepare .env" at build time. This image never bakes config.
+ *     .dockerignore excludes .env, and application.properties imports it
+ *     optionally from the working directory, so the values arrive at runtime
+ *     from /opt/paves/.env.api — never from a layer, never from ECR.
  *
  *   - No `mvn package` on the agent. The Dockerfile is multi-stage and already
  *     resolves, compiles and layers the jar. Running Maven here too would just
  *     build it twice. The agent needs Docker only: no JDK, no Maven.
+ *
+ * The VPS holds NO long-lived AWS credentials. Both the secrets and the ECR
+ * token arrive over the SSH connection, and the token is revoked at the end.
  *
  * Usage (Jenkinsfile in careers-backend):
  *
@@ -32,12 +39,34 @@
  *   )
  *
  * Builds and tags from `main` by default; override with branch: '<name>'.
+ * Set deploy: false to build and publish without rolling out.
  */
 
 def call(Map config) {
 
-  def serviceName = config.serviceName
-  def ecrRepo     = config.ecrRepo
+  def serviceName    = config.serviceName
+  def ecrRepo        = config.ecrRepo
+
+  // ── Deploy target ────────────────────────────────────────────────────
+  def ssmParameter   = config.ssmParameter   ?: 'paves_careers_backend'
+  def composeService = config.composeService ?: 'api'
+  def tagKey         = config.tagKey         ?: 'API_TAG'
+  def containerName  = config.containerName  ?: 'paves-api'
+  def envFileName    = config.envFileName    ?: '.env.api'
+  def containerPort  = config.containerPort  ?: '8080'
+  // Used only as a fallback when the image carries no HEALTHCHECK.
+  def healthPath     = config.healthPath     ?: '/actuator/health'
+  def vpsHost        = config.vpsHost        ?: '2.25.234.207'
+  def vpsUser        = config.vpsUser        ?: 'deploy'
+  def composeDir     = config.composeDir     ?: '/opt/paves'
+  def sshCredsId     = config.sshCredentialsId ?: 'vps-deploy-key'
+  def awsCredsId     = config.awsCredentialsId ?: 'aws-ecr-credentials'
+  def deployEnabled  = (config.deploy == false) ? 'false' : 'true'
+
+  // Keys the service cannot start without. Checked before anything is written,
+  // so a truncated or wrong SSM parameter fails loudly instead of producing a
+  // container that boots and then dies on its first database call.
+  def requiredKeys   = config.requiredKeys ?: ['DB_URL', 'DB_USERNAME', 'DB_PASSWORD']
 
   def ecrRegistry = config.ecrRegistry ?: '743737183908.dkr.ecr.ap-south-1.amazonaws.com'
   def region      = config.region      ?: 'ap-south-1'
@@ -45,13 +74,6 @@ def call(Map config) {
 
   pipeline {
     agent { label 'worker' }
-
-    options {
-      timestamps()
-      disableConcurrentBuilds()
-      timeout(time: 40, unit: 'MINUTES')
-      buildDiscarder(logRotator(numToKeepStr: '30'))
-    }
 
     stages {
 
@@ -66,8 +88,6 @@ def call(Map config) {
             env.SHORT_SHA    = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
             env.IMAGE_TAG    = "${branch}-${env.SHORT_SHA}"
             env.FULL_IMAGE   = "${ecrRegistry}/${ecrRepo}:${env.IMAGE_TAG}"
-            // Moving tag, so "what is currently on main" is always pullable.
-            env.MOVING_IMAGE = "${ecrRegistry}/${ecrRepo}:${branch}"
             // Exported for the shell blocks below: they are single-quoted, so
             // they read real environment variables instead of interpolating.
             env.SERVICE_NAME = serviceName
@@ -75,10 +95,27 @@ def call(Map config) {
             env.ECR_REPO     = ecrRepo
             env.AWS_DEFAULT_REGION = region
 
+            // Deploy target, same reason.
+            env.DEPLOY_ENABLED  = deployEnabled
+            env.SSM_PARAM       = ssmParameter
+            env.COMPOSE_SERVICE = composeService
+            env.TAG_KEY         = tagKey
+            env.CONTAINER_NAME  = containerName
+            env.ENV_FILE        = envFileName
+            env.CONTAINER_PORT  = containerPort
+            env.HEALTH_PATH     = healthPath
+            env.VPS_HOST        = vpsHost
+            env.VPS_USER        = vpsUser
+            env.COMPOSE_DIR     = composeDir
+            env.REQUIRED_KEYS   = requiredKeys.join(' ')
+
             // Shown on the Teams card.
             env.COMMITTER = sh(script: 'git log -1 --pretty=format:"%an"', returnStdout: true).trim()
 
             echo "Image will be: ${env.FULL_IMAGE}"
+            echo deployEnabled == 'true' \
+              ? "Deploy target: ${vpsUser}@${vpsHost} → ${composeDir} (${composeService}, ${tagKey})" \
+              : "Deploy: DISABLED (build and publish only)"
           }
         }
       }
@@ -106,7 +143,7 @@ def call(Map config) {
         }
       }
 
-      // ── STEP 2: Build Docker image (linux/amd64) ──────────────────────
+      // ── STEP 2: Build Docker image ────────────────────────────────────
       // Maven resolves, compiles and layers the jar inside the build. Tests are
       // skipped there by design; run them in a separate CI job if you want them
       // gating this pipeline.
@@ -118,19 +155,30 @@ def call(Map config) {
 
             echo "Building Docker image (Maven runs inside the build)..."
 
-            docker build -t "$FULL_IMAGE" -t "$MOVING_IMAGE" --label "org.opencontainers.image.revision=$GIT_COMMIT" --label "com.paves.jenkins.build=$BUILD_URL" .
+            docker build -t "$FULL_IMAGE" --label "org.opencontainers.image.revision=$GIT_COMMIT" --label "com.paves.jenkins.build=$BUILD_URL" .
 
             echo "Image built: $FULL_IMAGE"
             docker image inspect "$FULL_IMAGE" --format 'arch={{.Os}}/{{.Architecture}} size={{.Size}}'
+
+            # The VPS is linux/amd64. An arm64 agent would produce an image that
+            # builds, pushes, and then refuses to start on the target — a failure
+            # that is very confusing to diagnose from the VPS end.
+            ARCH=$(docker image inspect "$FULL_IMAGE" --format '{{.Architecture}}')
+            if [ "$ARCH" != "amd64" ]; then
+              echo "ERROR: image architecture is '$ARCH', the VPS needs amd64."
+              echo "       Use an amd64 build agent, or add buildx + qemu and"
+              echo "       build with --platform linux/amd64."
+              exit 1
+            fi
           '''
         }
       }
 
       // ── STEP 3: Verify image before publishing ────────────────────────
       // Not a boot test: this service needs DB, S3 and UMS credentials to reach
-      // "Started", and those live in the Kubernetes secret, not in CI. What is
-      // checked here is that the layered jar was extracted correctly and the
-      // launcher the ENTRYPOINT names is actually present.
+      // "Started", and those live in SSM, not in CI. What is checked here is
+      // that the layered jar was extracted correctly and the launcher the
+      // ENTRYPOINT names is actually present.
       stage('Verify Image') {
         steps {
           sh '''
@@ -153,7 +201,7 @@ def call(Map config) {
         steps {
           withCredentials([[
             $class:            'AmazonWebServicesCredentialsBinding',
-            credentialsId:     'aws-ecr-credentials',
+            credentialsId:     awsCredsId,
             accessKeyVariable: 'AWS_ACCESS_KEY_ID',
             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
           ]]) {
@@ -166,15 +214,247 @@ def call(Map config) {
               # "repository does not exist".
               aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_DEFAULT_REGION" >/dev/null 2>&1 || {
                 echo "Creating ECR repository $ECR_REPO..."
-                aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_DEFAULT_REGION" --image-scanning-configuration scanOnPush=true >/dev/null
+                aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_DEFAULT_REGION" --image-tag-mutability IMMUTABLE --image-scanning-configuration scanOnPush=true >/dev/null
               }
+
+              # Tags are immutable and derived from the commit SHA, so a tag that
+              # already exists means this exact commit was built before. Rebuilding
+              # it would be rejected by ECR anyway; say why, clearly.
+              if aws ecr describe-images --repository-name "$ECR_REPO" --image-ids imageTag="$IMAGE_TAG" --region "$AWS_DEFAULT_REGION" >/dev/null 2>&1; then
+                echo "ERROR: $IMAGE_TAG already exists in $ECR_REPO."
+                echo "       This commit has already been built and pushed."
+                echo "       To redeploy it, run the deploy by hand or push a new commit."
+                exit 1
+              fi
 
               echo "Pushing image..."
               docker push "$FULL_IMAGE"
-              docker push "$MOVING_IMAGE"
 
               echo "Push complete: $FULL_IMAGE"
             '''
+          }
+        }
+      }
+
+      // ── STEP 5: Sync secrets to the VPS ───────────────────────────────
+      //
+      // Reads the flat JSON from AWS SSM, converts it to KEY=VALUE lines, and
+      // pipes it straight into /opt/paves/.env.api over SSH. The values never
+      // touch the agent's disk and never appear in the console log.
+      //
+      // This runs BEFORE the pull so that new config and the image that needs
+      // it arrive together.
+      stage('Sync Secrets') {
+        when {
+          environment name: 'DEPLOY_ENABLED', value: 'true'
+        }
+        steps {
+          withCredentials([[
+            $class:            'AmazonWebServicesCredentialsBinding',
+            credentialsId:     awsCredsId,
+            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+          ]]) {
+            sshagent(credentials: [sshCredsId]) {
+              sh '''
+                # Jenkins runs sh with -x. Disable it here: the pipeline below
+                # carries live credentials and the console log is stored.
+                set +x
+                set -eu
+
+                SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 $VPS_USER@$VPS_HOST"
+
+                echo "Reading $SSM_PARAM from SSM..."
+                # Held in a shell variable, not a file. Nothing to leak from the
+                # workspace, nothing for cleanWs to miss.
+                SECRET_JSON=$(aws ssm get-parameter \
+                                --name "$SSM_PARAM" \
+                                --with-decryption \
+                                --region "$AWS_DEFAULT_REGION" \
+                                --query Parameter.Value \
+                                --output text) || {
+                  echo "ERROR: could not read $SSM_PARAM."
+                  echo "       Check ssm:GetParameter on the parameter AND kms:Decrypt"
+                  echo "       on the key - a missing kms:Decrypt gives an AccessDenied"
+                  echo "       that does not mention KMS."
+                  exit 1; }
+
+                echo "$SECRET_JSON" | jq -e 'type == "object"' >/dev/null 2>&1 || {
+                  echo "ERROR: $SSM_PARAM is not a flat JSON object."
+                  exit 1; }
+
+                # A partial or wrong parameter must stop here. The alternative is
+                # a container that starts, then fails on its first DB call.
+                for K in $REQUIRED_KEYS; do
+                  echo "$SECRET_JSON" | jq -e --arg k "$K" 'has($k) and (.[$k] | tostring | length > 0)' >/dev/null 2>&1 || {
+                    echo "ERROR: required key '$K' is missing or empty in $SSM_PARAM"
+                    exit 1; }
+                done
+
+                KEY_COUNT=$(echo "$SECRET_JSON" | jq -r 'keys | length')
+                echo "Writing $KEY_COUNT keys to $COMPOSE_DIR/$ENV_FILE ..."
+
+                # umask sets the mode at creation; the explicit chmod covers the
+                # case where the file already exists, since `cat >` truncates but
+                # keeps the old permissions.
+                echo "$SECRET_JSON" \
+                  | jq -r 'to_entries | .[] | "\\(.key)=\\(.value)"' \
+                  | $SSH "umask 077 && cat > $COMPOSE_DIR/$ENV_FILE && chmod 600 $COMPOSE_DIR/$ENV_FILE"
+
+                # Confirm from the far end. Key names only — never the values.
+                echo "Landed on the VPS:"
+                $SSH "ls -l $COMPOSE_DIR/$ENV_FILE && cut -d= -f1 $COMPOSE_DIR/$ENV_FILE | sed 's/^/  - /'"
+
+                REMOTE_COUNT=$($SSH "wc -l < $COMPOSE_DIR/$ENV_FILE" | tr -d ' ')
+                if [ "$REMOTE_COUNT" != "$KEY_COUNT" ]; then
+                  echo "ERROR: wrote $KEY_COUNT keys but the VPS has $REMOTE_COUNT lines."
+                  echo "       A value probably contains a newline. Fix it in SSM."
+                  exit 1
+                fi
+
+                echo "Secrets synced."
+              '''
+            }
+          }
+        }
+      }
+
+      // ── STEP 6: Deploy to the VPS ─────────────────────────────────────
+      //
+      // The tag deployed is the immutable :main-<sha> built by this run, so
+      // /opt/paves/.env always names the exact commit that is serving traffic.
+      //
+      // Only this service's tag line is touched, so a frontend pipeline running
+      // at the same time cannot clobber it.
+      stage('Deploy to VPS') {
+        when {
+          environment name: 'DEPLOY_ENABLED', value: 'true'
+        }
+        steps {
+          withCredentials([[
+            $class:            'AmazonWebServicesCredentialsBinding',
+            credentialsId:     awsCredsId,
+            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+          ]]) {
+            sshagent(credentials: [sshCredsId]) {
+              sh '''
+                set -eu
+
+                SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=15 $VPS_USER@$VPS_HOST"
+
+                echo "=== 1/5  Connectivity and preflight ==================="
+                $SSH "test -f $COMPOSE_DIR/docker-compose.yml" || {
+                  echo "ERROR: $COMPOSE_DIR/docker-compose.yml not found on $VPS_HOST"
+                  echo "       Has the server been bootstrapped?"
+                  exit 1; }
+                $SSH "test -f $COMPOSE_DIR/.env" || {
+                  echo "ERROR: $COMPOSE_DIR/.env not found. Compose cannot resolve image tags."
+                  exit 1; }
+                $SSH "grep -q '^$TAG_KEY=' $COMPOSE_DIR/.env" || {
+                  echo "ERROR: $TAG_KEY is not present in $COMPOSE_DIR/.env"
+                  exit 1; }
+                $SSH "test -s $COMPOSE_DIR/$ENV_FILE" || {
+                  echo "ERROR: $COMPOSE_DIR/$ENV_FILE is missing or empty."
+                  echo "       The Sync Secrets stage should have written it."
+                  exit 1; }
+
+                # Remembered so a failed rollout can be put back.
+                PREV_TAG=$($SSH "grep '^$TAG_KEY=' $COMPOSE_DIR/.env | cut -d= -f2-")
+                echo "Currently deployed $TAG_KEY = ${PREV_TAG:-<empty>}"
+                echo "Rolling out        $TAG_KEY = $IMAGE_TAG"
+
+                echo "=== 2/5  Injecting a short-lived ECR token ============"
+                # Piped, so the token is never an argument and never reaches the
+                # console log. Valid 12h, but only used in the next 30 seconds.
+                aws ecr get-login-password --region "$AWS_DEFAULT_REGION" \
+                  | $SSH "docker login --username AWS --password-stdin $ECR_REGISTRY" \
+                  || { echo "ERROR: docker login failed on the VPS"; exit 1; }
+
+                echo "=== 3/5  Pulling $IMAGE_TAG ==========================="
+                $SSH "set -eu; cd $COMPOSE_DIR; docker compose pull $COMPOSE_SERVICE" || {
+                  echo "ERROR: pull failed. The image exists in ECR (it was just pushed),"
+                  echo "       so this is usually the ECR token or a network egress issue."
+                  $SSH "docker logout $ECR_REGISTRY" >/dev/null 2>&1 || true
+                  exit 1; }
+
+                echo "=== 4/5  Recreating container ========================="
+                # Tag bump and recreate are one SSH call: the window where .env
+                # points at an image that is not yet running stays minimal.
+                $SSH "set -eu
+                      cd $COMPOSE_DIR
+                      sed -i 's|^$TAG_KEY=.*|$TAG_KEY=$IMAGE_TAG|' .env
+                      grep '^$TAG_KEY=' .env
+                      docker compose up -d $COMPOSE_SERVICE"
+
+                echo "=== 5/5  Waiting for $CONTAINER_NAME ================="
+                # JVM start plus Hikari pool init on 2 shared vCPU, while other
+                # containers are also running: 3 minutes is not generous here.
+                #
+                # Reads the image's HEALTHCHECK when it has one, and falls back
+                # to probing the health endpoint directly when it does not.
+                # The loop runs on the VPS in one connection rather than one SSH
+                # round trip per poll.
+                if $SSH "CN=$CONTAINER_NAME; PORT=$CONTAINER_PORT; HP=$HEALTH_PATH; "'
+                      HAS_HC=$(docker inspect -f "{{if .State.Health}}yes{{else}}no{{end}}" "$CN" 2>/dev/null || echo no)
+                      echo "healthcheck in image: $HAS_HC"
+                      for i in $(seq 1 60); do
+                        RUNNING=$(docker inspect -f "{{.State.Running}}" "$CN" 2>/dev/null || echo false)
+                        if [ "$RUNNING" != "true" ]; then
+                          echo "container is not running (exited or never started)"
+                          exit 2
+                        fi
+                        if [ "$HAS_HC" = "yes" ]; then
+                          S=$(docker inspect -f "{{.State.Health.Status}}" "$CN" 2>/dev/null || echo missing)
+                          case "$S" in
+                            healthy)   echo "healthy after $((i*3))s"; exit 0 ;;
+                            unhealthy) echo "reported UNHEALTHY";      exit 2 ;;
+                          esac
+                        else
+                          if docker exec "$CN" wget -q -O - "http://127.0.0.1:${PORT}${HP}" >/dev/null 2>&1; then
+                            echo "health endpoint responded after $((i*3))s"; exit 0
+                          fi
+                        fi
+                        sleep 3
+                      done
+                      echo "not healthy after 180s"; exit 1'
+                then
+                  echo "Deployed: $FULL_IMAGE"
+                  $SSH "docker logout $ECR_REGISTRY" >/dev/null 2>&1 || true
+                else
+                  echo "--------------------------------------------------------"
+                  echo "ERROR: $CONTAINER_NAME did not become healthy."
+                  echo "Last 80 log lines from the VPS:"
+                  $SSH "docker logs --tail 80 $CONTAINER_NAME 2>&1" || true
+                  echo "--------------------------------------------------------"
+                  echo "Common causes, in rough order of likelihood:"
+                  echo "  - Aiven MySQL IP allowlist does not include $VPS_HOST"
+                  echo "  - a key in $SSM_PARAM is wrong (the sync only checks presence)"
+                  echo "  - health path $HEALTH_PATH is not what this service exposes"
+                  echo "  - the JVM needed longer than 180s on 2 vCPU"
+                  echo "--------------------------------------------------------"
+
+                  if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$IMAGE_TAG" ] && [ "$PREV_TAG" != "bootstrap" ]; then
+                    echo "Rolling back to $PREV_TAG ..."
+                    # NOTE: .env.api is NOT rolled back. If this deploy also
+                    # changed the secret shape, the previous image gets the new
+                    # config. That is usually what you want; if it is not, fix
+                    # SSM and redeploy rather than relying on the rollback.
+                    $SSH "set -eu
+                          cd $COMPOSE_DIR
+                          sed -i 's|^$TAG_KEY=.*|$TAG_KEY=$PREV_TAG|' .env
+                          docker compose up -d $COMPOSE_SERVICE" || echo "WARNING: rollback command failed"
+                    echo "Rolled back to $PREV_TAG."
+                  else
+                    echo "No usable previous tag ($PREV_TAG) - leaving the new one in place."
+                    echo "The API is DOWN. Investigate before retrying."
+                  fi
+
+                  $SSH "docker logout $ECR_REGISTRY" >/dev/null 2>&1 || true
+                  exit 1
+                fi
+              '''
+            }
           }
         }
       }
@@ -226,11 +506,11 @@ def call(Map config) {
         script {
           echo "Post-build cleanup..."
 
-          // Remove both tags this build produced from the local daemon
-          sh "docker rmi ${env.FULL_IMAGE ?: ''} ${env.MOVING_IMAGE ?: ''} 2>/dev/null || true"
+          // Remove the tag this build produced from the local daemon
+          sh "docker rmi ${env.FULL_IMAGE ?: ''} 2>/dev/null || true"
           sh "docker image prune -f || true"
           // Prune build cache but keep ~3GB, so the next build still hits the
-          // npm-ci / maven-dependency layers this Dockerfile is structured for.
+          // maven-dependency layer this Dockerfile is structured for.
           // Docker 29 renamed --keep-storage to --reserved-space; try both.
           sh "docker builder prune -f --reserved-space=3GB 2>/dev/null || docker builder prune -f --keep-storage=3GB 2>/dev/null || true"
           cleanWs()
