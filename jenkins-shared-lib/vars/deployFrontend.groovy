@@ -62,6 +62,13 @@ def call(Map config) {
 
   pipeline {
     agent { label 'worker' }
+
+    options {
+      timeout(time: 40, unit: 'MINUTES')
+      disableConcurrentBuilds()
+      timestamps()
+    }
+
     stages {
 
       // ── STEP 1: Checkout code ──────────────────────────────────────────
@@ -349,15 +356,27 @@ def call(Map config) {
                   || { echo "ERROR: docker login failed on the VPS"; exit 1; }
 
                 echo "=== 4/6  Pulling $IMAGE_TAG ==========================="
-                $SSH "set -eu; cd $COMPOSE_DIR; docker compose pull $COMPOSE_SERVICE" || {
-                  echo "ERROR: pull failed. The image exists in ECR (it was just pushed),"
-                  echo "       so this is usually the ECR token or a network egress issue."
+                # Pulled by full reference, NOT via compose: .env still names the
+                # previous tag at this point, so `compose pull` would fetch the
+                # old image. Pulling first also means the tag bump in the next
+                # step is followed by an immediate start, with no download in
+                # between during which .env names an image that is not present.
+                $SSH "docker pull $FULL_IMAGE" || {
+                  echo "ERROR: pull failed on the VPS."
+                  echo "  'not authorized to perform: ecr:BatchGetImage'"
+                  echo "        the IAM identity behind $ECR_REGISTRY can push but not pull."
+                  echo "        Add ecr:BatchGetImage, ecr:GetDownloadUrlForLayer and"
+                  echo "        ecr:DescribeImages for these repositories."
+                  echo "  'manifest unknown'"
+                  echo "        the tag is not in ECR - did the push stage really succeed?"
+                  echo "  a timeout or DNS error"
+                  echo "        the VPS cannot reach ECR; check egress from the VPS."
                   $SSH "docker logout $ECR_REGISTRY" >/dev/null 2>&1 || true
                   exit 1; }
 
                 echo "=== 5/6  Recreating container ========================="
-                # Tag bump and recreate are one SSH call: the window where .env
-                # points at an image that is not yet running stays minimal.
+                # The image is already local, so this is a tag bump and a restart
+                # with no network in the path.
                 $SSH "set -eu
                       cd $COMPOSE_DIR
                       sed -i 's|^$TAG_KEY=.*|$TAG_KEY=$IMAGE_TAG|' .env
