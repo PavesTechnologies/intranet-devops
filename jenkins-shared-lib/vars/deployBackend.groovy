@@ -9,7 +9,7 @@
  *   2. Build image               (Maven runs INSIDE the Dockerfile)
  *   3. Verify the image          (layer extraction, before it is published)
  *   4. Push to ECR               (one immutable tag: :main-<sha>)
- *   5. Sync secrets to the VPS   (AWS SSM → /opt/paves/.env.api)
+ *   5. Sync secrets to the VPS   (Secrets Manager or SSM → /opt/paves/.env.api)
  *   6. Deploy                    (tag bump, pull, recreate, health-gate, rollback)
  *
  * One tag per build, and it is never reused. "What is running in production" is
@@ -34,8 +34,10 @@
  *
  *   @Library('paves-website-scripts') _
  *   deployBackend(
- *     serviceName: 'careers-backend',
- *     ecrRepo:     'careers-backend'
+ *     serviceName:   'careers-backend',
+ *     ecrRepo:       'paves/career_backend',
+ *     secretName:    'paves_careers_backend',
+ *     secretSource:  'secretsmanager'
  *   )
  *
  * Builds and tags from `main` by default; override with branch: '<name>'.
@@ -48,7 +50,10 @@ def call(Map config) {
   def ecrRepo        = config.ecrRepo
 
   // ── Deploy target ────────────────────────────────────────────────────
-  def ssmParameter   = config.ssmParameter   ?: 'paves_careers_backend'
+  // The secret holding this service's runtime config, as flat JSON.
+  // secretSource: 'auto' (try SSM, then Secrets Manager), 'ssm', or 'secretsmanager'.
+  def secretName     = config.secretName ?: config.ssmParameter ?: 'paves_careers_backend'
+  def secretSource   = config.secretSource   ?: 'auto'
   def composeService = config.composeService ?: 'api'
   def tagKey         = config.tagKey         ?: 'API_TAG'
   def containerName  = config.containerName  ?: 'paves-api'
@@ -79,6 +84,7 @@ def call(Map config) {
       timestamps()
       disableConcurrentBuilds()
       timeout(time: 40, unit: 'MINUTES')
+      // buildDiscarder(logRotator(numToKeepStr: '3'))
     }
 
     stages {
@@ -103,7 +109,8 @@ def call(Map config) {
 
             // Deploy target, same reason.
             env.DEPLOY_ENABLED  = deployEnabled
-            env.SSM_PARAM       = ssmParameter
+            env.SECRET_NAME     = secretName
+            env.SECRET_SOURCE   = secretSource
             env.COMPOSE_SERVICE = composeService
             env.TAG_KEY         = tagKey
             env.CONTAINER_NAME  = containerName
@@ -294,30 +301,91 @@ def call(Map config) {
                   echo "  'Connection timed out'      this agent's IP is not allowed on port 22."
                   exit 1; }
 
-                echo "Reading $SSM_PARAM from SSM..."
+                echo "Reading '$SECRET_NAME' (source: $SECRET_SOURCE)..."
+
+                # stderr is kept so the real AWS message can be shown on failure.
+                # It carries no secret values, only the error text.
+                ERRFILE=$(mktemp)
+                trap 'rm -f "$ERRFILE"' EXIT
+
+                fetch_ssm() {
+                  aws ssm get-parameter \
+                    --name "$SECRET_NAME" \
+                    --with-decryption \
+                    --region "$AWS_DEFAULT_REGION" \
+                    --query Parameter.Value \
+                    --output text 2>"$ERRFILE"
+                }
+                fetch_sm() {
+                  aws secretsmanager get-secret-value \
+                    --secret-id "$SECRET_NAME" \
+                    --region "$AWS_DEFAULT_REGION" \
+                    --query SecretString \
+                    --output text 2>"$ERRFILE"
+                }
+
                 # Held in a shell variable, not a file. Nothing to leak from the
                 # workspace, nothing for cleanWs to miss.
-                SECRET_JSON=$(aws ssm get-parameter \
-                                --name "$SSM_PARAM" \
-                                --with-decryption \
-                                --region "$AWS_DEFAULT_REGION" \
-                                --query Parameter.Value \
-                                --output text) || {
-                  echo "ERROR: could not read $SSM_PARAM."
-                  echo "       Check ssm:GetParameter on the parameter AND kms:Decrypt"
-                  echo "       on the key - a missing kms:Decrypt gives an AccessDenied"
-                  echo "       that does not mention KMS."
-                  exit 1; }
+                SECRET_JSON=""
+                SOURCE_USED=""
+
+                case "$SECRET_SOURCE" in
+                  ssm)
+                    SECRET_JSON=$(fetch_ssm) || {
+                      echo "ERROR: could not read '$SECRET_NAME' from SSM Parameter Store."
+                      cat "$ERRFILE"
+                      echo
+                      echo "  ParameterNotFound  it does not exist under that exact name in"
+                      echo "                     $AWS_DEFAULT_REGION. Names are case-sensitive, and a"
+                      echo "                     parameter created with a leading slash must be"
+                      echo "                     requested with it. It may also be in Secrets"
+                      echo "                     Manager instead - pass secretSource: 'secretsmanager'."
+                      echo "  AccessDenied       missing ssm:GetParameter, or kms:Decrypt for a"
+                      echo "                     SecureString (that error never mentions KMS)."
+                      exit 1; }
+                    SOURCE_USED="SSM Parameter Store"
+                    ;;
+                  secretsmanager)
+                    SECRET_JSON=$(fetch_sm) || {
+                      echo "ERROR: could not read '$SECRET_NAME' from Secrets Manager."
+                      cat "$ERRFILE"
+                      exit 1; }
+                    SOURCE_USED="Secrets Manager"
+                    ;;
+                  auto)
+                    if SECRET_JSON=$(fetch_ssm); then
+                      SOURCE_USED="SSM Parameter Store"
+                    elif SECRET_JSON=$(fetch_sm); then
+                      SOURCE_USED="Secrets Manager"
+                    else
+                      echo "ERROR: '$SECRET_NAME' was not found in either SSM Parameter Store"
+                      echo "       or Secrets Manager in $AWS_DEFAULT_REGION."
+                      echo "Last error was:"
+                      cat "$ERRFILE"
+                      echo
+                      echo "List what actually exists:"
+                      echo "  aws ssm describe-parameters --region $AWS_DEFAULT_REGION --query 'Parameters[].Name'"
+                      echo "  aws secretsmanager list-secrets --region $AWS_DEFAULT_REGION --query 'SecretList[].Name'"
+                      exit 1
+                    fi
+                    ;;
+                  *)
+                    echo "ERROR: secretSource must be auto, ssm or secretsmanager (got '$SECRET_SOURCE')"
+                    exit 1
+                    ;;
+                esac
+
+                echo "Read from: $SOURCE_USED"
 
                 echo "$SECRET_JSON" | jq -e 'type == "object"' >/dev/null 2>&1 || {
-                  echo "ERROR: $SSM_PARAM is not a flat JSON object."
+                  echo "ERROR: '$SECRET_NAME' is not a flat JSON object."
                   exit 1; }
 
-                # A partial or wrong parameter must stop here. The alternative is
+                # A partial or wrong secret must stop here. The alternative is
                 # a container that starts, then fails on its first DB call.
                 for K in $REQUIRED_KEYS; do
                   echo "$SECRET_JSON" | jq -e --arg k "$K" 'has($k) and (.[$k] | tostring | length > 0)' >/dev/null 2>&1 || {
-                    echo "ERROR: required key '$K' is missing or empty in $SSM_PARAM"
+                    echo "ERROR: required key '$K' is missing or empty in '$SECRET_NAME'"
                     exit 1; }
                 done
 
@@ -498,7 +566,7 @@ def call(Map config) {
                   echo "--------------------------------------------------------"
                   echo "Common causes, in rough order of likelihood:"
                   echo "  - Aiven MySQL IP allowlist does not include $VPS_HOST"
-                  echo "  - a key in $SSM_PARAM is wrong (the sync only checks presence)"
+                  echo "  - a key in $SECRET_NAME is wrong (the sync only checks presence)"
                   echo "  - health path $HEALTH_PATH is not what this service exposes"
                   echo "  - the JVM needed longer than 180s on 2 vCPU"
                   echo "--------------------------------------------------------"
