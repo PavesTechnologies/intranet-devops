@@ -75,6 +75,12 @@ def call(Map config) {
   pipeline {
     agent { label 'worker' }
 
+    options {
+      timestamps()
+      disableConcurrentBuilds()
+      timeout(time: 40, unit: 'MINUTES')
+    }
+
     stages {
 
       // ── STEP 1: Checkout code ──────────────────────────────────────────
@@ -249,20 +255,44 @@ def call(Map config) {
           environment name: 'DEPLOY_ENABLED', value: 'true'
         }
         steps {
-          withCredentials([[
-            $class:            'AmazonWebServicesCredentialsBinding',
-            credentialsId:     awsCredsId,
-            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-          ]]) {
-            sshagent(credentials: [sshCredsId]) {
+          // sshUserPrivateKey comes from Credentials Binding, so the SSH Agent
+          // plugin is not required. It writes the key to a temporary file and
+          // deletes it when the block exits.
+          withCredentials([
+            [
+              $class:            'AmazonWebServicesCredentialsBinding',
+              credentialsId:     awsCredsId,
+              accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+              secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+            ],
+            sshUserPrivateKey(
+              credentialsId:    sshCredsId,
+              keyFileVariable:  'SSH_KEY',
+              usernameVariable: 'SSH_USER'
+            )
+          ]) {
+            script {
               sh '''
                 # Jenkins runs sh with -x. Disable it here: the pipeline below
                 # carries live credentials and the console log is stored.
                 set +x
                 set -eu
 
-                SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 $VPS_USER@$VPS_HOST"
+                REMOTE_USER="${SSH_USER:-$VPS_USER}"
+                SSH="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 $REMOTE_USER@$VPS_HOST"
+
+                # Verified before the secret is read, so an SSH problem never
+                # leaves a fetched secret sitting in the agent's memory with
+                # nowhere to go.
+                $SSH 'echo "connected as $(whoami)@$(hostname)"' || {
+                  echo "ERROR: cannot reach $REMOTE_USER@$VPS_HOST over SSH."
+                  echo "Read the ssh error printed just above this line:"
+                  echo "  'error in libcrypto'        malformed private key in the Jenkins"
+                  echo "                              credential (usually CRLF line endings)."
+                  echo "  'Permission denied'         public key missing from ~/.ssh/authorized_keys"
+                  echo "                              for user $REMOTE_USER on the VPS."
+                  echo "  'Connection timed out'      this agent's IP is not allowed on port 22."
+                  exit 1; }
 
                 echo "Reading $SSM_PARAM from SSM..."
                 # Held in a shell variable, not a file. Nothing to leak from the
@@ -331,19 +361,46 @@ def call(Map config) {
           environment name: 'DEPLOY_ENABLED', value: 'true'
         }
         steps {
-          withCredentials([[
-            $class:            'AmazonWebServicesCredentialsBinding',
-            credentialsId:     awsCredsId,
-            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-          ]]) {
-            sshagent(credentials: [sshCredsId]) {
+          withCredentials([
+            [
+              $class:            'AmazonWebServicesCredentialsBinding',
+              credentialsId:     awsCredsId,
+              accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+              secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+            ],
+            sshUserPrivateKey(
+              credentialsId:    sshCredsId,
+              keyFileVariable:  'SSH_KEY',
+              usernameVariable: 'SSH_USER'
+            )
+          ]) {
+            script {
               sh '''
                 set -eu
 
-                SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=15 $VPS_USER@$VPS_HOST"
+                REMOTE_USER="${SSH_USER:-$VPS_USER}"
+                # IdentitiesOnly stops ssh offering the agent's other keys first
+                # and tripping the server's MaxAuthTries.
+                SSH="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=15 $REMOTE_USER@$VPS_HOST"
 
-                echo "=== 1/5  Connectivity and preflight ==================="
+                echo "=== 1/6  SSH authentication =========================="
+                # Checked on its own, because every later failure would otherwise
+                # be reported as whatever that step was looking for.
+                $SSH 'echo "connected as $(whoami)@$(hostname)"' || {
+                  echo "ERROR: cannot reach $REMOTE_USER@$VPS_HOST over SSH."
+                  echo "Read the ssh error printed just above this line:"
+                  echo "  'error in libcrypto'        the private key in the Jenkins credential"
+                  echo "                              is malformed - usually CRLF line endings or"
+                  echo "                              a broken paste. Re-create the credential,"
+                  echo "                              generating the key on a Linux host."
+                  echo "  'Permission denied'         the matching public key is not in"
+                  echo "                              ~/.ssh/authorized_keys for user $REMOTE_USER"
+                  echo "                              on the VPS (check it is deploy's file, not root's)."
+                  echo "  'Connection timed out'      this agent's IP is not allowed on port 22."
+                  echo "                              Add it to the Hostinger VPS firewall."
+                  exit 1; }
+
+                echo "=== 2/6  Preflight ==================================="
                 $SSH "test -f $COMPOSE_DIR/docker-compose.yml" || {
                   echo "ERROR: $COMPOSE_DIR/docker-compose.yml not found on $VPS_HOST"
                   echo "       Has the server been bootstrapped?"
@@ -364,30 +421,42 @@ def call(Map config) {
                 echo "Currently deployed $TAG_KEY = ${PREV_TAG:-<empty>}"
                 echo "Rolling out        $TAG_KEY = $IMAGE_TAG"
 
-                echo "=== 2/5  Injecting a short-lived ECR token ============"
+                echo "=== 3/6  Injecting a short-lived ECR token ============"
                 # Piped, so the token is never an argument and never reaches the
                 # console log. Valid 12h, but only used in the next 30 seconds.
                 aws ecr get-login-password --region "$AWS_DEFAULT_REGION" \
                   | $SSH "docker login --username AWS --password-stdin $ECR_REGISTRY" \
                   || { echo "ERROR: docker login failed on the VPS"; exit 1; }
 
-                echo "=== 3/5  Pulling $IMAGE_TAG ==========================="
-                $SSH "set -eu; cd $COMPOSE_DIR; docker compose pull $COMPOSE_SERVICE" || {
-                  echo "ERROR: pull failed. The image exists in ECR (it was just pushed),"
-                  echo "       so this is usually the ECR token or a network egress issue."
+                echo "=== 4/6  Pulling $IMAGE_TAG ==========================="
+                # Pulled by full reference, NOT via compose: .env still names the
+                # previous tag at this point, so `compose pull` would fetch the
+                # old image. Pulling first also means the tag bump in the next
+                # step is followed by an immediate start, with no download in
+                # between during which .env names an image that is not present.
+                $SSH "docker pull $FULL_IMAGE" || {
+                  echo "ERROR: pull failed on the VPS."
+                  echo "  'not authorized to perform: ecr:BatchGetImage'"
+                  echo "        the IAM identity behind $ECR_REGISTRY can push but not pull."
+                  echo "        Add ecr:BatchGetImage, ecr:GetDownloadUrlForLayer and"
+                  echo "        ecr:DescribeImages for these repositories."
+                  echo "  'manifest unknown'"
+                  echo "        the tag is not in ECR - did the push stage really succeed?"
+                  echo "  a timeout or DNS error"
+                  echo "        the VPS cannot reach ECR; check egress from the VPS."
                   $SSH "docker logout $ECR_REGISTRY" >/dev/null 2>&1 || true
                   exit 1; }
 
-                echo "=== 4/5  Recreating container ========================="
-                # Tag bump and recreate are one SSH call: the window where .env
-                # points at an image that is not yet running stays minimal.
+                echo "=== 5/6  Recreating container ========================="
+                # The image is already local, so this is a tag bump and a restart
+                # with no network in the path.
                 $SSH "set -eu
                       cd $COMPOSE_DIR
                       sed -i 's|^$TAG_KEY=.*|$TAG_KEY=$IMAGE_TAG|' .env
                       grep '^$TAG_KEY=' .env
                       docker compose up -d $COMPOSE_SERVICE"
 
-                echo "=== 5/5  Waiting for $CONTAINER_NAME ================="
+                echo "=== 6/6  Waiting for $CONTAINER_NAME ================="
                 # JVM start plus Hikari pool init on 2 shared vCPU, while other
                 # containers are also running: 3 minutes is not generous here.
                 #
