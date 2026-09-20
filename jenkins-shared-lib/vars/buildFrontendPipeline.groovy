@@ -57,7 +57,7 @@ def call(Map config) {
     options {
       timestamps()
       disableConcurrentBuilds()
-      buildDiscarder(logRotator(numToKeepStr: '20'))
+      buildDiscarder(logRotator(numToKeepStr: '1'))
     }
 
     environment {
