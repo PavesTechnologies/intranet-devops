@@ -60,7 +60,9 @@ def call(Map config) {
   def envFileName    = config.envFileName    ?: '.env.api'
   def containerPort  = config.containerPort  ?: '8080'
   // Used only as a fallback when the image carries no HEALTHCHECK.
-  def healthPath     = config.healthPath     ?: '/actuator/health'
+  // careers-backend exposes common/HealthController at /health, not the
+  // actuator default.
+  def healthPath     = config.healthPath     ?: '/health'
   def vpsHost        = config.vpsHost        ?: '2.25.234.207'
   def vpsUser        = config.vpsUser        ?: 'deploy'
   def composeDir     = config.composeDir     ?: '/opt/paves'
@@ -84,7 +86,7 @@ def call(Map config) {
       timestamps()
       disableConcurrentBuilds()
       timeout(time: 40, unit: 'MINUTES')
-      // buildDiscarder(logRotator(numToKeepStr: '3'))
+      buildDiscarder(logRotator(numToKeepStr: '3'))
     }
 
     stages {
