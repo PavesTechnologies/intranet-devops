@@ -54,12 +54,6 @@ def call(Map config) {
   pipeline {
     agent { label 'worker' }
 
-    options {
-      timestamps()
-      disableConcurrentBuilds()
-      buildDiscarder(logRotator(numToKeepStr: '1'))
-    }
-
     environment {
       APP_NAME           = "${config.appName}"
       S3_BUCKET          = "${config.s3Bucket}"
