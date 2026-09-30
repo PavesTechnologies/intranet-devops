@@ -84,9 +84,9 @@ def call(Map config) {
 
     options {
       timestamps()
-      disableConcurrentBuilds()
+      // disableConcurrentBuilds()
       timeout(time: 40, unit: 'MINUTES')
-      buildDiscarder(logRotator(numToKeepStr: '3'))
+      // buildDiscarder(logRotator(numToKeepStr: '3'))
     }
 
     stages {
