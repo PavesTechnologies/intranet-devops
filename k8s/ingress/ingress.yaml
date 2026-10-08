@@ -73,3 +73,10 @@ spec:
                 name: airs-service
                 port:
                   number: 8002
+          - path: /ar
+            pathType: Prefix
+            backend:
+              service:
+                name: ar-service
+                port:
+                  number: 8080
