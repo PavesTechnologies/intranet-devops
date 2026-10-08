@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ar-service
+  namespace: backend
+  labels:
+    app: ar
+    team: paves
+spec:
+  selector:
+    app: ar
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
