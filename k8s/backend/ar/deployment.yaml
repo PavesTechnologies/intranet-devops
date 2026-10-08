@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ar-deployment
+  namespace: backend
+  labels:
+    app: ar
+    team: paves
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ar
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ar
+    spec:
+      serviceAccountName: paves-service-account
+      containers:
+        - name: ar
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/ar-dev:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: ar-secrets
+          env:
+            - name: SERVER_SERVLET_CONTEXT_PATH
+              value: "/ar"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /ar/health
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ar/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
