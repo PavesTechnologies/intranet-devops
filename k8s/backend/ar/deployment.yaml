@@ -24,7 +24,7 @@ spec:
       serviceAccountName: paves-service-account
       containers:
         - name: ar
-          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/ar-dev:latest
+          image: 743737183908.dkr.ecr.ap-south-1.amazonaws.com/paves/ar-dev:dev-4270bbc
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
