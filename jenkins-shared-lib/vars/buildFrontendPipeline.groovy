@@ -318,19 +318,35 @@ ${entries}
             echo "📤 Uploading ${config.buildDir}/ to S3 bucket: ${config.s3Bucket}"
 
             sh '''
-              # Main sync — uploads all files with general cache policy
-              aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ \
-                --delete \
+              set -e
+
+              # 1. Hashed assets — file names change every build, so cache for 1 hour.
+              #    No --delete: users holding an older index.html must still be able
+              #    to load the assets it references (otherwise 404 after each deploy).
+              #    Old assets are cleaned up by an S3 lifecycle rule on assets/.
+              aws s3 sync $BUILD_DIR/assets/ s3://$S3_BUCKET/assets/ \
                 --region $AWS_DEFAULT_REGION \
                 --cache-control "public, max-age=3600"
-              
-              # Explicitly set config.js to no-cache/no-store
-              # This ensures browser NEVER caches the config, always fetches fresh
+
+              # 2. Remaining static files (logos etc.) — short cache.
+              aws s3 sync $BUILD_DIR/ s3://$S3_BUCKET/ \
+                --region $AWS_DEFAULT_REGION \
+                --exclude "assets/*" --exclude "index.html" --exclude "config.js" \
+                --cache-control "public, max-age=3600"
+
+              # 3. config.js — never cached, always fetched fresh
               aws s3 cp $BUILD_DIR/config.js s3://$S3_BUCKET/config.js \
                 --region $AWS_DEFAULT_REGION \
                 --cache-control "no-store, must-revalidate" \
                 --metadata "deployment-time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 --content-type "application/javascript"
+
+              # 4. index.html LAST and never cached, so it only ever points at
+              #    assets that are already uploaded.
+              aws s3 cp $BUILD_DIR/index.html s3://$S3_BUCKET/index.html \
+                --region $AWS_DEFAULT_REGION \
+                --cache-control "no-cache, no-store, must-revalidate" \
+                --content-type "text/html"
             '''
             echo "✅ S3 deployment complete — all files uploaded"
           }
