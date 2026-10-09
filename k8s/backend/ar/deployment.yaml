@@ -50,7 +50,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /ar/health
+              path: /paves/ar/health
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 10
