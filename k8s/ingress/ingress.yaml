@@ -73,7 +73,7 @@ spec:
                 name: airs-service
                 port:
                   number: 8002
-          - path: /ar
+          - path: /paves/ar
             pathType: Prefix
             backend:
               service:
