@@ -43,7 +43,7 @@ spec:
               memory: "1Gi"
           livenessProbe:
             httpGet:
-              path: /ar/health
+              path: /paves/ar/health
               port: 8080
             initialDelaySeconds: 90
             periodSeconds: 30
