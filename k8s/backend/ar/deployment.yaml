@@ -33,7 +33,7 @@ spec:
                 name: ar-secrets
           env:
             - name: SERVER_SERVLET_CONTEXT_PATH
-              value: "/ar"
+              value: "/paves/ar"
           resources:
             requests:
               cpu: "250m"
