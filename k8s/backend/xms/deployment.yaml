@@ -32,8 +32,9 @@ spec:
             - secretRef:
                 name: xms-secrets
           env:
-            - name: SERVER_SERVLET_CONTEXT_PATH
-              value: "/xms"
+            # No SERVER_SERVLET_CONTEXT_PATH here: XMS controllers already map
+            # under "/xms/..." in code, so a "/xms" context path doubles it to
+            # "/xms/xms/...". The ingress forwards /xms unchanged to the pod.
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-service.infra.svc.cluster.local:9092"
             - name: CDC_EMPLOYEE_TOPIC
