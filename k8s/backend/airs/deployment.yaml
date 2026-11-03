@@ -22,7 +22,7 @@ metadata:
     app: airs-api
     team: paves
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: airs-api
