@@ -22,7 +22,7 @@ metadata:
     app: airs-api
     team: paves
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: airs-api
@@ -103,7 +103,7 @@ metadata:
     app: airs-worker
     team: paves
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: airs-worker
@@ -185,7 +185,7 @@ spec:
   # double-fires all 10 entries in celery_app.conf.beat_schedule, several of
   # which send email (campaign health alerts, stalled-candidate escalations,
   # interview-feedback requests). Never scale this.
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: airs-beat
